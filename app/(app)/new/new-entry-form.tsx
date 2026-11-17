@@ -8,6 +8,8 @@ import { ITEM_TYPES, STATUS_LABEL, addDaysISO, fmtDate } from "@/lib/format";
 import { normalizePhone, isValidPhone } from "@/lib/auth";
 import type { Tailor } from "@/lib/types";
 import { Btn, Field, inputCls } from "@/components/ui";
+import { WaButton } from "@/components/wa-button";
+import { receiptButton, type Shop, type Template } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { createEntry, lookupCustomer, savePiecePhotos, type CustomerLookup, type NewEntryResult } from "./actions";
 
@@ -15,7 +17,7 @@ type PieceDraft = { key: string; type: string; notes: string; description: strin
 let pieceCounter = 0;
 const newPiece = (): PieceDraft => ({ key: `p${pieceCounter++}`, type: "", notes: "", description: "", photos: [] });
 
-export function NewEntryForm({ tailors, today }: { tailors: Tailor[]; today: string }) {
+export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tailor[]; today: string; templates: Template[]; shop: Shop }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [lookup, setLookup] = useState<CustomerLookup | null>(null);
@@ -108,6 +110,11 @@ export function NewEntryForm({ tailors, today }: { tailors: Tailor[]; today: str
 
   if (done) {
     const { result, photoIssue } = done;
+    const receipt = receiptButton({
+      token_year: result.tokenYear, token_no: result.tokenNo, status: "received", public_slug: result.slug,
+      promised_date: promised, ready_at: null, delivered_at: null, collected_by_name: null,
+      customerName: result.customerName, customerPhone: phone10, itemTypes: pieces.map((p) => p.type),
+    }, templates, shop);
     return (
       <section className="space-y-5 text-center" aria-live="polite">
         <div className="rounded-2xl border border-border bg-card p-6">
@@ -123,7 +130,11 @@ export function NewEntryForm({ tailors, today }: { tailors: Tailor[]; today: str
             Some photos did not upload. The entry is saved; open the token and add the photo from there.
           </p>
         )}
-        <Link href={`/a/${result.label}`} className="flex h-12 items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground">
+        {receipt && (
+          <WaButton alterationId={result.id} templateKey="receipt" label={receipt.label} href={receipt.href}
+            disabledReason={receipt.disabledReason} />
+        )}
+        <Link href={`/a/${result.label}`} className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">
           Open token
         </Link>
         <Link href="/" className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">

@@ -7,6 +7,9 @@ import { STATUS_LABEL, fmtDate, fmtDateTime, isOverdue, parseToken, rupees, toke
 import type { Status, Tailor } from "@/lib/types";
 import { StatusBadge } from "@/components/ui";
 import { PieceCard, type PieceView } from "./piece-card";
+import { WaButton } from "@/components/wa-button";
+import { getMessageContext } from "@/lib/message-data";
+import { messageButtons } from "@/lib/messages";
 import { TokenActions } from "./token-actions";
 
 type Params = { token: string };
@@ -32,7 +35,8 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
     .from("alterations")
     .select(`*, customer:customers(id,name,phone), tailor:tailors(name),
       creator:profiles!alterations_created_by_fkey(name), deliverer:profiles!alterations_delivered_by_fkey(name),
-      pieces:alteration_pieces(*), events:alteration_events(*, actor:profiles(name))`)
+      pieces:alteration_pieces(*), events:alteration_events(*, actor:profiles(name)),
+      messages:message_log(id, template_key, opened_at, who:profiles(name))`)
     .eq("token_year", parsed.year).eq("token_no", parsed.no).maybeSingle();
   if (!a) notFound();
 
@@ -48,6 +52,20 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
     const { data } = await supabase.storage.from("item-photos").createSignedUrls(paths, 3600);
     data?.forEach((s) => { if (s.path && s.signedUrl) signed.set(s.path, s.signedUrl); });
   }
+
+  const { templates, shop } = await getMessageContext();
+  const msgs = [...(a.messages as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[])]
+    .sort((x, y) => y.id - x.id);
+  const buttons = messageButtons({
+    token_year: a.token_year, token_no: a.token_no, status: a.status, public_slug: a.public_slug,
+    promised_date: a.promised_date, ready_at: a.ready_at, delivered_at: a.delivered_at,
+    collected_by_name: a.collected_by_name, customerName: a.customer.name, customerPhone: a.customer.phone,
+    itemTypes: pieces.map((p) => p.item_type),
+  }, templates, shop);
+  const timeline = [
+    ...events.map((e) => ({ at: e.created_at, sort: e.id, kind: "event" as const, e })),
+    ...msgs.map((m) => ({ at: m.opened_at, sort: m.id, kind: "msg" as const, m })),
+  ].sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : y.sort - x.sort));
 
   const label = tokenLabel(a.token_year, a.token_no);
   const overdue = isOverdue(a.promised_date, a.status);
@@ -99,11 +117,33 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
         tailors={(tailors ?? []) as Tailor[]} role={me.role}
       />
 
+      {a.status !== "cancelled" && buttons.length > 0 && (
+        <section aria-label="WhatsApp" className="space-y-3">
+          <h2 className="text-lg font-semibold">WhatsApp</h2>
+          {buttons.map((b) => {
+            const last = msgs.find((m) => m.template_key === b.key);
+            return (
+              <WaButton key={b.key} alterationId={a.id} templateKey={b.key} label={b.label} href={b.href}
+                disabledReason={b.disabledReason}
+                lastSent={last ? { by: last.who?.name ?? "—", at: fmtDateTime(last.opened_at) } : null} />
+            );
+          })}
+          <a href={`/t/${a.public_slug}`} target="_blank" rel="noreferrer"
+            className="block text-center text-sm text-primary underline">Preview customer page</a>
+        </section>
+      )}
+
       <section aria-label="History">
         <h2 className="mb-2 text-lg font-semibold">History</h2>
         <ol className="space-y-3 border-l-2 border-border pl-4">
-          {events.map((e) => (
-            <li key={e.id} className="relative">
+          {timeline.map((t) => t.kind === "msg" ? (
+            <li key={`m${t.m.id}`} className="relative">
+              <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-[#128c4a]" aria-hidden />
+              <p className="text-sm font-medium">Opened WhatsApp: {templates.find((x) => x.key === t.m.template_key)?.label ?? t.m.template_key}</p>
+              <p className="text-xs text-muted">{t.m.who?.name ?? "—"} · {fmtDateTime(t.m.opened_at)}</p>
+            </li>
+          ) : (() => { const e = t.e; return (
+            <li key={`e${e.id}`} className="relative">
               <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-primary" aria-hidden />
               <p className="text-sm font-medium">
                 {e.kind === "status" && e.to_status
@@ -115,8 +155,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
                 <a href={signed.get(e.photo_path)} target="_blank" rel="noreferrer" className="text-sm text-primary underline">Handover photo</a>
               )}
               <p className="text-xs text-muted">{e.actor?.name ?? "—"} · {fmtDateTime(e.created_at)}</p>
-            </li>
-          ))}
+            </li>); })())}
           <li className="relative">
             <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-muted" aria-hidden />
             <p className="text-sm font-medium">Entry created</p>

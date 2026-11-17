@@ -44,7 +44,7 @@ export type NewEntryInput = {
 };
 
 export type NewEntryResult = ActionResult<{
-  id: string; label: string; slug: string; customerName: string; pieceIds: string[];
+  id: string; label: string; slug: string; customerName: string; pieceIds: string[]; tokenYear: number; tokenNo: number;
 }>;
 
 export async function createEntry(input: NewEntryInput): Promise<NewEntryResult> {
@@ -65,7 +65,7 @@ export async function createEntry(input: NewEntryInput): Promise<NewEntryResult>
   const r = data as { id: string; token_year: number; token_no: number; slug: string; customer_name: string; piece_ids: string[] };
   return {
     ok: true, id: r.id, label: tokenLabel(r.token_year, r.token_no), slug: r.slug,
-    customerName: r.customer_name, pieceIds: r.piece_ids,
+    customerName: r.customer_name, pieceIds: r.piece_ids, tokenYear: r.token_year, tokenNo: r.token_no,
   };
 }
 
