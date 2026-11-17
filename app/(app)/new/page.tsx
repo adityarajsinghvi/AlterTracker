@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import { PageTitle } from "@/components/page-title";
-import { ComingSoon } from "@/components/coming-soon";
+import { createClient } from "@/lib/supabase/server";
+import { todayIST } from "@/lib/format";
+import { NewEntryForm } from "./new-entry-form";
 
 export const metadata: Metadata = { title: "New alteration" };
 
-export default function Page() {
+export default async function NewPage() {
+  const supabase = await createClient();
+  const { data: tailors } = await supabase
+    .from("tailors").select("id,name,is_in_house").eq("active", true).order("is_in_house", { ascending: false }).order("name");
   return (
     <>
       <PageTitle>New alteration</PageTitle>
-      <ComingSoon phase="Phase 2" />
+      <NewEntryForm tailors={tailors ?? []} today={todayIST()} />
     </>
   );
 }
