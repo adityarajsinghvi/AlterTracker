@@ -10,7 +10,8 @@
     "seed:owner": "tsx scripts/seed-owner.ts",
     "typecheck": "tsc --noEmit",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy:embedded": "opennextjs-cloudflare build && node scripts/embed-assets.mjs && wrangler deploy --config wrangler.embedded.jsonc"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.17",
