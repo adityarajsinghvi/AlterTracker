@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Phone } from "lucide-react";
+import { Phone, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
 import { STATUS_LABEL, daysSince, fmtDate, fmtDateTime, isOverdue, parseToken, rupees, tokenLabel } from "@/lib/format";
@@ -110,6 +110,10 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
           <a href={`tel:+91${a.customer.phone}`} aria-label={`Call ${a.customer.name}`}
             className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Phone className="size-5" aria-hidden />
+          </a>
+          <a href={`/a/${label}/contact`} target="_blank" rel="noopener" aria-label={`Save ${a.customer.name} to phone contacts`}
+            className="flex size-11 items-center justify-center rounded-full border border-border bg-card">
+            <UserPlus className="size-5" aria-hidden />
           </a>
           <span className="text-sm font-normal text-muted">{a.customer.phone}</span>
         </p>
