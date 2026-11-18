@@ -1,6 +1,7 @@
 // Wraps the OpenNext worker and serves static files from the bundle (no Workers static-assets binding needed).
 import worker from "../.open-next/worker.js";
 import files from "../.open-next/embedded-assets.js";
+import { keepAlive } from "./keep-alive.js";
 
 export { DOQueueHandler, DOShardedTagCache, BucketCachePurge } from "../.open-next/worker.js";
 
@@ -30,6 +31,11 @@ function serve(request) {
 }
 
 export default {
+  // Runs on the schedule in wrangler.embedded.jsonc (once a day).
+  async scheduled(_event, env) {
+    console.log("keep-alive:", await keepAlive(env));
+  },
+
   async fetch(request, env, ctx) {
     if (request.method === "GET" || request.method === "HEAD") {
       const res = serve(request);

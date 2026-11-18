@@ -12,6 +12,7 @@ const adminLinks = [
   { href: "/more/templates", label: "Message templates" },
   { href: "/more/settings", label: "Shop settings" },
   { href: "/more/activity", label: "Activity" },
+  { href: "/more/export", label: "Export data (backup)" },
 ];
 
 export default async function MorePage() {

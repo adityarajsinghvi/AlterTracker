@@ -4,5 +4,10 @@
   "main": "scripts/worker-embedded.js",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "placement": { "mode": "smart" }
+  "placement": { "mode": "smart" },
+  "triggers": { "crons": ["17 3 * * *"] },
+  "vars": {
+    "SUPABASE_URL": "https://clxdfhhgiedhmjlpkdmb.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_jkVI-VRLZtc1uTR9yQwD0w_oQ8BF3Vm"
+  }
 }
