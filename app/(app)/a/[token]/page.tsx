@@ -3,15 +3,17 @@ import { notFound } from "next/navigation";
 import { Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
-import { STATUS_LABEL, fmtDate, fmtDateTime, isOverdue, parseToken, rupees, tokenLabel, daysSince } from "@/lib/format";
+import { STATUS_LABEL, daysSince, fmtDate, fmtDateTime, isOverdue, parseToken, rupees, tokenLabel } from "@/lib/format";
 import type { Status, Tailor } from "@/lib/types";
 import { StatusBadge } from "@/components/ui";
-import { PieceCard, type PieceView } from "./piece-card";
 import { WaButton } from "@/components/wa-button";
 import { getMessageContext } from "@/lib/message-data";
 import { getItemSuggestions } from "@/lib/item-suggestions";
-import { messageButtons } from "@/lib/messages";
-import { TokenActions } from "./token-actions";
+import { itemsText, messageButtons } from "@/lib/messages";
+import { summarizeItems } from "@/lib/items";
+import { EditDetails } from "./edit-details";
+import { ItemsPanel, type ItemView } from "./items-panel";
+import { VisitPhotos } from "./visit-photos";
 
 type Params = { token: string };
 
@@ -20,10 +22,26 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   return { title: `Token #${decodeURIComponent(token)}` };
 }
 
+type PieceRow = {
+  id: string; item_type: string; work_notes: string | null; sort: number; status: Status; tailor_id: string | null;
+  tailor: { name: string } | null; status_at: string; delivered_at: string | null; collected_by_name: string | null;
+  redo_count: number; cancel_reason: string | null;
+};
 type EventRow = {
   id: number; kind: string; from_status: Status | null; to_status: Status | null; note: string | null;
-  photo_path: string | null; created_at: string; actor: { name: string } | null;
+  photo_path: string | null; created_at: string; actor: { name: string } | null; piece_ids: string[] | null;
 };
+
+const VERB: Record<string, string> = {
+  with_tailor: "Sent to tailor", ready: "Marked ready", delivered: "Handed over", received: "Moved back to received", cancelled: "Cancelled",
+};
+
+function eventTitle(e: EventRow, names: Map<string, string>): string {
+  if (e.kind !== "status" || !e.to_status) return e.note ?? "Edited";
+  const verb = e.from_status === "ready" && e.to_status === "with_tailor" ? "Redo: sent back to tailor" : VERB[e.to_status];
+  const list = e.piece_ids?.length ? itemsText(e.piece_ids.map((id) => names.get(id) ?? "item")) : "all items";
+  return `${verb}: ${list}`;
+}
 
 export default async function TokenPage({ params }: { params: Promise<Params> }) {
   const { token } = await params;
@@ -34,12 +52,11 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
   const [me, { data: a }, { data: tailors }, { templates, shop }, itemSuggestions] = await Promise.all([
     getMe(),
     supabase
-    .from("alterations")
-    .select(`*, customer:customers(id,name,phone), tailor:tailors(name),
-      creator:profiles!alterations_created_by_fkey(name), deliverer:profiles!alterations_delivered_by_fkey(name),
-      pieces:alteration_pieces(*), events:alteration_events(*, actor:profiles(name)),
-      messages:message_log(id, template_key, opened_at, who:profiles(name))`)
-    .eq("token_year", parsed.year).eq("token_no", parsed.no).maybeSingle(),
+      .from("alterations")
+      .select(`*, customer:customers(id,name,phone), creator:profiles!alterations_created_by_fkey(name),
+        pieces:alteration_pieces(*, tailor:tailors(name)), events:alteration_events(*, actor:profiles(name)),
+        messages:message_log(id, template_key, opened_at, who:profiles(name))`)
+      .eq("token_year", parsed.year).eq("token_no", parsed.no).maybeSingle(),
     supabase.from("tailors").select("id,name,is_in_house").eq("active", true)
       .order("is_in_house", { ascending: false }).order("name"),
     getMessageContext(),
@@ -47,23 +64,23 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
   ]);
   if (!a) notFound();
 
-  const pieces = [...(a.pieces as (PieceView & { sort: number; photo_paths: string[] })[])].sort((x, y) => x.sort - y.sort);
+  const pieces = [...(a.pieces as PieceRow[])].sort((x, y) => x.sort - y.sort);
   const events = [...(a.events as EventRow[])].sort((x, y) => y.id - x.id);
+  const names = new Map(pieces.map((p) => [p.id, p.item_type]));
 
-  const paths = [...pieces.flatMap((p) => p.photo_paths), ...events.map((e) => e.photo_path).filter((x): x is string => !!x)];
+  const paths = [...(a.photo_paths as string[]), ...events.map((e) => e.photo_path).filter((x): x is string => !!x)];
   const signed = new Map<string, string>();
   if (paths.length) {
     const { data } = await supabase.storage.from("item-photos").createSignedUrls(paths, 3600);
     data?.forEach((s) => { if (s.path && s.signedUrl) signed.set(s.path, s.signedUrl); });
   }
 
-  const msgs = [...(a.messages as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[])]
-    .sort((x, y) => y.id - x.id);
+  const msgs = [...(a.messages as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[])].sort((x, y) => y.id - x.id);
   const buttons = messageButtons({
     token_year: a.token_year, token_no: a.token_no, status: a.status, public_slug: a.public_slug,
     promised_date: a.promised_date, ready_at: a.ready_at, delivered_at: a.delivered_at,
     collected_by_name: a.collected_by_name, customerName: a.customer.name, customerPhone: a.customer.phone,
-    itemTypes: pieces.map((p) => p.item_type),
+    itemTypes: pieces.filter((p) => p.status !== "cancelled").map((p) => p.item_type),
   }, templates, shop);
   const timeline = [
     ...events.map((e) => ({ at: e.created_at, sort: e.id, kind: "event" as const, e })),
@@ -73,7 +90,12 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
   const label = tokenLabel(a.token_year, a.token_no);
   const overdue = isOverdue(a.promised_date, a.status);
   const closed = a.status === "delivered" || a.status === "cancelled";
-  const days = daysSince(a.status === "with_tailor" ? a.sent_to_tailor_at : a.status === "ready" ? a.ready_at : a.created_at);
+
+  const items: ItemView[] = pieces.map((p) => ({
+    id: p.id, name: p.item_type, note: p.work_notes, status: p.status, tailorId: p.tailor_id, tailorName: p.tailor?.name ?? null,
+    days: daysSince(p.status_at), collectedBy: p.collected_by_name, deliveredAt: p.delivered_at ? fmtDateTime(p.delivered_at) : null,
+    redo: p.redo_count, cancelReason: p.cancel_reason,
+  }));
 
   return (
     <article className="space-y-6">
@@ -90,35 +112,31 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
           </a>
           <span className="text-sm font-normal text-muted">{a.customer.phone}</span>
         </p>
+        <p className="text-sm font-medium">{summarizeItems(pieces.map((p) => ({ status: p.status, tailor: p.tailor?.name ?? null })))}</p>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <dt className="text-muted">Promised</dt>
           <dd className={overdue ? "font-semibold text-danger" : "font-medium"}>{fmtDate(a.promised_date)}{overdue && " · overdue"}</dd>
-          {!closed && <><dt className="text-muted">{STATUS_LABEL[a.status]} for</dt><dd className="font-medium">{days === 0 ? "today" : `${days} day${days > 1 ? "s" : ""}`}</dd></>}
-          {a.tailor?.name && <><dt className="text-muted">Tailor</dt><dd className="font-medium">{a.tailor.name}</dd></>}
           {a.rack_label && <><dt className="text-muted">Rack</dt><dd className="font-medium">{a.rack_label}</dd></>}
           <dt className="text-muted">Charge</dt>
           <dd className="font-medium">{rupees(a.charge)}{a.charge != null && (a.paid ? " · paid" : " · unpaid")}</dd>
-          {a.redo_count > 0 && <><dt className="text-muted">Redos</dt><dd className="font-medium">{a.redo_count}</dd></>}
-          {a.status === "delivered" && <><dt className="text-muted">Collected by</dt><dd className="font-medium">{a.collected_by_name}</dd></>}
           {a.status === "cancelled" && <><dt className="text-muted">Cancelled</dt><dd className="font-medium">{a.cancel_reason}</dd></>}
         </dl>
       </header>
 
-      <section aria-label="Pieces" className="space-y-3">
-        {pieces.map((p) => (
-          <PieceCard key={p.id} piece={p} alterationId={a.id} closed={closed} itemSuggestions={itemSuggestions}
-            photoUrls={p.photo_paths.map((x) => signed.get(x)).filter((x): x is string => !!x)} />
-        ))}
-      </section>
+      <VisitPhotos alterationId={a.id} urls={(a.photo_paths as string[]).map((p) => signed.get(p)).filter((x): x is string => !!x)}
+        pending={a.photo_pending} closed={closed} />
 
-      <TokenActions
-        alteration={{
-          id: a.id, status: a.status, promised: a.promised_date, tailorId: a.tailor_id, charge: a.charge, paid: a.paid,
-          rack: a.rack_label ?? "", customerId: a.customer.id, customerName: a.customer.name, customerPhone: a.customer.phone,
-          label,
-        }}
-        tailors={(tailors ?? []) as Tailor[]} role={me.role}
+      <ItemsPanel
+        alterationId={a.id} label={label} customerName={a.customer.name} items={items} tailors={(tailors ?? []) as Tailor[]}
+        role={me.role} charge={a.charge} paid={a.paid} suggestions={itemSuggestions} tokenClosed={closed}
       />
+
+      {!closed && (
+        <EditDetails alt={{
+          id: a.id, promised: a.promised_date, charge: a.charge, paid: a.paid, rack: a.rack_label ?? "",
+          customerId: a.customer.id, customerName: a.customer.name, customerPhone: a.customer.phone,
+        }} role={me.role} />
+      )}
 
       {a.status !== "cancelled" && buttons.length > 0 && (
         <section aria-label="WhatsApp" className="space-y-3">
@@ -131,8 +149,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
                 lastSent={last ? { by: last.who?.name ?? "—", at: fmtDateTime(last.opened_at) } : null} />
             );
           })}
-          <a href={`/t/${a.public_slug}`} target="_blank" rel="noreferrer"
-            className="block text-center text-sm text-primary underline">Preview customer page</a>
+          <a href={`/t/${a.public_slug}`} target="_blank" rel="noreferrer" className="block text-center text-sm text-primary underline">Preview customer page</a>
         </section>
       )}
 
@@ -148,11 +165,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
           ) : (() => { const e = t.e; return (
             <li key={`e${e.id}`} className="relative">
               <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-primary" aria-hidden />
-              <p className="text-sm font-medium">
-                {e.kind === "status" && e.to_status
-                  ? e.from_status ? `${STATUS_LABEL[e.from_status]} → ${STATUS_LABEL[e.to_status]}` : STATUS_LABEL[e.to_status]
-                  : e.note}
-              </p>
+              <p className="text-sm font-medium">{eventTitle(e, names)}</p>
               {e.kind === "status" && e.note && <p className="text-sm">{e.note}</p>}
               {e.photo_path && signed.get(e.photo_path) && (
                 <a href={signed.get(e.photo_path)} target="_blank" rel="noreferrer" className="text-sm text-primary underline">Handover photo</a>
@@ -161,11 +174,12 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
             </li>); })())}
           <li className="relative">
             <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-muted" aria-hidden />
-            <p className="text-sm font-medium">Entry created</p>
+            <p className="text-sm font-medium">Entry created · {pieces.length} item{pieces.length === 1 ? "" : "s"}</p>
             <p className="text-xs text-muted">{a.creator?.name ?? "—"} · {fmtDateTime(a.created_at)}</p>
           </li>
         </ol>
       </section>
+      <span className="sr-only">{STATUS_LABEL[a.status]}</span>
     </article>
   );
 }

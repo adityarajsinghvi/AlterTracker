@@ -36,7 +36,8 @@ export type NewEntryInput = {
   phone: string;
   name: string;
   promised: string;
-  pieces: { item_type: string; work_notes: string; description?: string; has_photo: boolean }[];
+  items: { name: string; note?: string }[];
+  hasPhoto: boolean;
   tailorId: string | null;
   charge: number | null;
   paid: boolean;
@@ -55,11 +56,12 @@ export async function createEntry(input: NewEntryInput): Promise<NewEntryResult>
     p_phone: phone,
     p_name: input.name,
     p_promised: input.promised,
-    p_pieces: input.pieces.map((p) => ({ ...p, item_type: normalizeItem(p.item_type) })),
+    p_pieces: input.items.map((i) => ({ name: normalizeItem(i.name), note: i.note?.trim() || null })),
     p_tailor: input.tailorId,
     p_charge: input.charge,
     p_paid: input.paid,
     p_rack: input.rack || null,
+    p_has_photo: input.hasPhoto,
   });
   if (error) return { ok: false, error: error.message };
   const r = data as { id: string; token_year: number; token_no: number; slug: string; customer_name: string; piece_ids: string[] };
@@ -69,8 +71,8 @@ export async function createEntry(input: NewEntryInput): Promise<NewEntryResult>
   };
 }
 
-export async function savePiecePhotos(pieceId: string, paths: string[], pending: boolean): Promise<ActionResult> {
+export async function saveVisitPhotos(alterationId: string, paths: string[], pending: boolean): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_piece_photos", { p_piece: pieceId, p_paths: paths, p_pending: pending });
+  const { error } = await supabase.rpc("set_alteration_photos", { p_alteration: alterationId, p_paths: paths, p_pending: pending });
   return error ? { ok: false, error: error.message } : { ok: true };
 }

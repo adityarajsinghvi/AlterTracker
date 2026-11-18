@@ -1,28 +1,32 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Camera, Plus, Trash2, TriangleAlert, Check } from "lucide-react";
+import { Camera, Check, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/image";
 import { STATUS_LABEL, addDaysISO, fmtDate, normalizeItem } from "@/lib/format";
-import { ItemInput } from "@/components/item-input";
 import { normalizePhone, isValidPhone } from "@/lib/auth";
 import type { Tailor } from "@/lib/types";
 import { Btn, Field, inputCls } from "@/components/ui";
+import { ItemInput } from "@/components/item-input";
 import { WaButton } from "@/components/wa-button";
-import { receiptButton, type Shop, type Template } from "@/lib/messages";
+import { receiptButton, itemsText, type Shop, type Template } from "@/lib/messages";
 import { cn } from "@/lib/utils";
-import { createEntry, lookupCustomer, savePiecePhotos, type CustomerLookup, type NewEntryResult } from "./actions";
+import { createEntry, lookupCustomer, saveVisitPhotos, type CustomerLookup, type NewEntryResult } from "./actions";
 
-type PieceDraft = { key: string; type: string; notes: string; description: string; photos: { file: File; url: string }[] };
-let pieceCounter = 0;
-const newPiece = (): PieceDraft => ({ key: `p${pieceCounter++}`, type: "", notes: "", description: "", photos: [] });
+type Row = { key: string; name: string; note: string; qty: string };
+let rowCounter = 0;
+const newRow = (): Row => ({ key: `r${++rowCounter}`, name: "", note: "", qty: "1" });
+const MAX_ITEMS = 60;
 
-export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions }: { tailors: Tailor[]; today: string; templates: Template[]; shop: Shop; itemSuggestions: string[] }) {
+export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions }: {
+  tailors: Tailor[]; today: string; templates: Template[]; shop: Shop; itemSuggestions: string[];
+}) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [lookup, setLookup] = useState<CustomerLookup | null>(null);
-  const [pieces, setPieces] = useState<PieceDraft[]>(() => [{ key: "p-first", type: "", notes: "", description: "", photos: [] }]);
+  const [rows, setRows] = useState<Row[]>(() => [{ key: "r-first", name: "", note: "", qty: "1" }]);
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
   const [promised, setPromised] = useState(addDaysISO(today, 3));
   const [tailorId, setTailorId] = useState("");
   const [charge, setCharge] = useState("");
@@ -30,8 +34,9 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
   const [rack, setRack] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ result: Extract<NewEntryResult, { ok: true }>; photoIssue: boolean } | null>(null);
+  const [done, setDone] = useState<{ result: Extract<NewEntryResult, { ok: true }>; photoIssue: boolean; itemNames: string[] } | null>(null);
   const lookupSeq = useRef(0);
+  const focusKey = useRef<string | null>(null);
 
   const phone10 = normalizePhone(phone);
   useEffect(() => {
@@ -44,23 +49,37 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
     }).catch(() => {});
   }, [phone10]);
 
-  const existing = lookup?.name != null;
-  const updatePiece = (key: string, patch: Partial<PieceDraft>) =>
-    setPieces((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  // After "add a row", move the cursor into it.
+  useEffect(() => {
+    if (!focusKey.current) return;
+    document.getElementById(`item-${focusKey.current}`)?.focus();
+    focusKey.current = null;
+  }, [rows.length]);
 
-  async function addPhotos(key: string, files: FileList | null) {
+  const existing = lookup?.name != null;
+  const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const addRowAfter = (key: string) => {
+    const nr = newRow();
+    focusKey.current = nr.key;
+    setRows((rs) => { const i = rs.findIndex((r) => r.key === key); const next = [...rs]; next.splice(i + 1, 0, nr); return next; });
+  };
+  const qtyOf = (r: Row) => Math.min(20, Math.max(1, parseInt(r.qty, 10) || 1));
+  const filled = rows.filter((r) => r.name.trim() || r.note.trim());
+  const totalItems = filled.reduce((n, r) => n + qtyOf(r), 0);
+
+  function addPhotos(files: FileList | null) {
     if (!files?.length) return;
+    // Copy the files NOW: the input is cleared right after this call, which empties the live FileList.
     const added = Array.from(files).map((file) => ({ file, url: URL.createObjectURL(file) }));
-    setPieces((ps) => ps.map((p) => (p.key === key ? { ...p, photos: [...p.photos, ...added] } : p)));
+    setPhotos((ps) => [...ps, ...added]);
   }
 
   function validate(): string | null {
     if (!isValidPhone(phone10)) return "Enter a valid 10-digit mobile number.";
     if (!existing && !name.trim()) return "Enter the customer's name.";
-    for (const [i, p] of pieces.entries()) {
-      if (!p.type.trim()) return `Piece ${i + 1}: write what it is (Suit, Shirt…).`;
-      if (!p.notes.trim()) return `Piece ${i + 1}: write the work to be done.`;
-    }
+    if (filled.length === 0) return "Add at least one item.";
+    for (const r of filled) if (!r.name.trim()) return "Every item needs a name. Write what it is (Suit, Shirt…).";
+    if (totalItems > MAX_ITEMS) return `That is more than ${MAX_ITEMS} items. Please split it into two tokens.`;
     if (!promised) return "Choose a promised date.";
     return null;
   }
@@ -70,38 +89,34 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
     if (v) { setError(v); return; }
     setError(null);
     setBusy("Saving…");
+    // A row with quantity 3 becomes three separate items, so each can move on its own.
+    const items = filled.flatMap((r) => Array.from({ length: qtyOf(r) }, () => ({ name: normalizeItem(r.name), note: r.note.trim() || undefined })));
     try {
       const res = await createEntry({
-        phone: phone10, name: name.trim(), promised,
-        pieces: pieces.map((p) => ({ item_type: normalizeItem(p.type), work_notes: p.notes.trim(), description: p.description.trim() || undefined, has_photo: p.photos.length > 0 })),
-        tailorId: tailorId || null,
-        charge: charge.trim() === "" ? null : Number(charge),
-        paid, rack: rack.trim(),
+        phone: phone10, name: name.trim(), promised, items, hasPhoto: photos.length > 0,
+        tailorId: tailorId || null, charge: charge.trim() === "" ? null : Number(charge), paid, rack: rack.trim(),
       });
       if (!res.ok) { setError(res.error); setBusy(null); return; }
 
-      // Entry is saved. Upload photos in parallel; a failure only marks the piece "photo pending".
+      // The entry is saved. Photos upload next; a failure only marks the visit "photo pending".
       let photoIssue = false;
-      const supabase = createClient();
-      const withPhotos = pieces.map((p, i) => ({ p, id: res.pieceIds[i] })).filter((x) => x.p.photos.length);
-      if (withPhotos.length) {
+      if (photos.length) {
         setBusy("Uploading photos…");
-        await Promise.all(withPhotos.map(async ({ p, id }) => {
-          const results = await Promise.all(p.photos.map(async (ph, n) => {
-            try {
-              const blob = await compressImage(ph.file);
-              const path = `${res.id}/${id}-${Date.now()}-${n}.jpg`;
-              const { error: upErr } = await supabase.storage.from("item-photos").upload(path, blob, { contentType: "image/jpeg" });
-              return upErr ? null : path;
-            } catch { return null; }
-          }));
-          const paths = results.filter((x): x is string => !!x);
-          const failed = paths.length < p.photos.length;
-          if (failed) photoIssue = true;
-          try { await savePiecePhotos(id, paths, failed); } catch { photoIssue = true; }
+        const supabase = createClient();
+        const results = await Promise.all(photos.map(async (ph, n) => {
+          try {
+            const blob = await compressImage(ph.file);
+            const path = `${res.id}/visit-${Date.now()}-${n}.jpg`;
+            const { error: upErr } = await supabase.storage.from("item-photos").upload(path, blob, { contentType: "image/jpeg" });
+            return upErr ? null : path;
+          } catch { return null; }
         }));
+        const paths = results.filter((x): x is string => !!x);
+        const failed = paths.length < photos.length;
+        if (failed) photoIssue = true;
+        try { await saveVisitPhotos(res.id, paths, failed); } catch { photoIssue = true; }
       }
-      setDone({ result: res, photoIssue });
+      setDone({ result: res, photoIssue, itemNames: items.map((i) => i.name) });
     } catch {
       setError("No internet connection. Your entry is still filled in. Please try Save again.");
     } finally {
@@ -110,17 +125,18 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
   }
 
   if (done) {
-    const { result, photoIssue } = done;
+    const { result, photoIssue, itemNames } = done;
     const receipt = receiptButton({
       token_year: result.tokenYear, token_no: result.tokenNo, status: "received", public_slug: result.slug,
       promised_date: promised, ready_at: null, delivered_at: null, collected_by_name: null,
-      customerName: result.customerName, customerPhone: phone10, itemTypes: pieces.map((p) => normalizeItem(p.type)),
+      customerName: result.customerName, customerPhone: phone10, itemTypes: itemNames,
     }, templates, shop);
     return (
       <section className="space-y-5 text-center" aria-live="polite">
         <div className="rounded-2xl border border-border bg-card p-6">
           <p className="text-sm text-muted">Saved for {result.customerName}</p>
           <p className="mt-1 whitespace-nowrap text-4xl font-bold tracking-tight text-primary">Token #{result.label}</p>
+          <p className="mt-2 text-sm text-muted">{itemNames.length} item{itemNames.length === 1 ? "" : "s"}: {itemsText(itemNames)}</p>
           <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
             Write <b>#{result.label}</b> on the tag
           </p>
@@ -132,15 +148,10 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
           </p>
         )}
         {receipt && (
-          <WaButton alterationId={result.id} templateKey="receipt" label={receipt.label} href={receipt.href}
-            disabledReason={receipt.disabledReason} />
+          <WaButton alterationId={result.id} templateKey="receipt" label={receipt.label} href={receipt.href} disabledReason={receipt.disabledReason} />
         )}
-        <Link href={`/a/${result.label}`} className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">
-          Open token
-        </Link>
-        <Link href="/" className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">
-          Back to Home
-        </Link>
+        <Link href={`/a/${result.label}`} className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">Open token</Link>
+        <Link href="/" className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">Back to Home</Link>
         <button type="button" onClick={() => location.assign("/new")} className="h-12 w-full font-medium text-primary">+ Another entry</button>
       </section>
     );
@@ -164,7 +175,7 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
           <div role="status" className="rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
             <p className="flex items-center gap-2 font-semibold">
               <TriangleAlert className="size-4" aria-hidden />
-              {lookup.open.length} {lookup.open.length === 1 ? "item" : "items"} already in for alteration
+              {lookup.open.length} {lookup.open.length === 1 ? "visit" : "visits"} already in for alteration
             </p>
             <ul className="mt-1 space-y-0.5">
               {lookup.open.map((o) => (
@@ -179,45 +190,61 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
         </Field>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Pieces</h2>
-        {pieces.map((p, i) => (
-          <div key={p.key} className="space-y-3 rounded-2xl border border-border bg-card p-3">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">Piece {i + 1}</span>
-              {pieces.length > 1 && (
-                <button type="button" aria-label={`Remove piece ${i + 1}`} onClick={() => setPieces((ps) => ps.filter((x) => x.key !== p.key))}
-                  className="flex size-11 items-center justify-center rounded-full text-danger active:bg-border">
+      <section className="space-y-3" aria-label="Items">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Items</h2>
+          {totalItems > 0 && <span className="text-sm text-muted">{totalItems} in total</span>}
+        </div>
+        {rows.map((r, i) => (
+          <div key={r.key} className="space-y-2 rounded-2xl border border-border bg-card p-3">
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <ItemInput id={`item-${r.key}`} label={`Item ${i + 1}`} value={r.name} onChange={(v) => update(r.key, { name: v })}
+                  suggestions={itemSuggestions} onEnter={() => r.name.trim() && addRowAfter(r.key)} />
+              </div>
+              <div className="w-16 shrink-0">
+                <label htmlFor={`qty-${r.key}`} className="mb-1 block text-sm font-medium">Qty</label>
+                <input id={`qty-${r.key}`} inputMode="numeric" maxLength={2} value={r.qty}
+                  onChange={(e) => update(r.key, { qty: e.target.value.replace(/\D/g, "") })} onBlur={() => update(r.key, { qty: String(qtyOf(r)) })}
+                  className={cn(inputCls, "px-2 text-center")} />
+              </div>
+              {rows.length > 1 && (
+                <button type="button" aria-label={`Remove item ${i + 1}`} onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+                  className="flex size-12 shrink-0 items-center justify-center rounded-xl text-danger active:bg-border">
                   <Trash2 className="size-5" />
                 </button>
               )}
             </div>
-            <ItemInput id={`type-${p.key}`} label={`What is piece ${i + 1}?`} value={p.type} onChange={(v) => updatePiece(p.key, { type: v })} suggestions={itemSuggestions} />
-            <Field label="Work to be done" htmlFor={`notes-${p.key}`}>
-              <textarea id={`notes-${p.key}`} rows={2} value={p.notes} onChange={(e) => updatePiece(p.key, { notes: e.target.value })}
-                placeholder="e.g. Sleeves short 1 inch, taper waist" className={cn(inputCls, "h-auto py-3")} />
-            </Field>
-            <Field label="Description (optional)" htmlFor={`desc-${p.key}`}>
-              <input id={`desc-${p.key}`} value={p.description} onChange={(e) => updatePiece(p.key, { description: e.target.value })}
-                placeholder="e.g. Navy blazer, bought here" className={inputCls} />
-            </Field>
-            <div className="flex flex-wrap items-center gap-2">
-              {p.photos.map((ph) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={ph.url} src={ph.url} alt="" className="size-16 rounded-lg border border-border object-cover" />
-              ))}
-              <label className="flex h-16 min-w-16 cursor-pointer items-center justify-center gap-1 rounded-lg border border-dashed border-border px-3 text-sm font-medium text-primary">
-                <Camera className="size-5" aria-hidden /> Photo
-                <input type="file" accept="image/*" capture="environment" className="sr-only"
-                  onChange={(e) => { addPhotos(p.key, e.target.files); e.target.value = ""; }} />
-              </label>
-            </div>
+            <input aria-label={`Work for item ${i + 1} (optional)`} value={r.note} onChange={(e) => update(r.key, { note: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (r.name.trim()) addRowAfter(r.key); } }}
+              placeholder="Work to do (optional): e.g. sleeves short 1 inch" className={inputCls} enterKeyHint="next" />
           </div>
         ))}
-        <button type="button" onClick={() => setPieces((ps) => [...ps, newPiece()])}
+        <button type="button" onClick={() => addRowAfter(rows[rows.length - 1].key)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-primary font-semibold text-primary">
-          <Plus className="size-5" aria-hidden /> Add another piece
+          <Plus className="size-5" aria-hidden /> Add another item
         </button>
+      </section>
+
+      <section className="space-y-3" aria-label="Photos">
+        <h2 className="text-lg font-semibold">Photos <span className="text-sm font-normal text-muted">(optional, one picture can show everything)</span></h2>
+        <div className="flex flex-wrap items-center gap-2">
+          {photos.map((ph, n) => (
+            <div key={ph.url} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={ph.url} alt={`Photo ${n + 1}`} className="size-20 rounded-lg border border-border object-cover" />
+              <button type="button" aria-label={`Remove photo ${n + 1}`} onClick={() => setPhotos((ps) => ps.filter((x) => x.url !== ph.url))}
+                className="absolute -right-2 -top-2 flex size-7 items-center justify-center rounded-full bg-foreground text-background">
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+          <label className="flex h-20 min-w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border px-3 text-sm font-medium text-primary">
+            <Camera className="size-5" aria-hidden /> {photos.length ? "Add more" : "Take photo"}
+            <input type="file" accept="image/*" capture="environment" className="sr-only"
+              onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -237,7 +264,7 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
       <details className="rounded-2xl border border-border bg-card p-3">
         <summary className="flex h-11 cursor-pointer items-center font-semibold">More options (tailor, charge, rack)</summary>
         <div className="mt-2 space-y-3">
-          <Field label="Send to tailor now" htmlFor="tailor">
+          <Field label="Send everything to a tailor now" htmlFor="tailor" hint="You can also send items one by one later, to different tailors.">
             <select id="tailor" value={tailorId} onChange={(e) => setTailorId(e.target.value)} className={inputCls}>
               <option value="">Not yet</option>
               {tailors.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}

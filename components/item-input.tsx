@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 import { inputCls } from "@/components/ui";
 
 /** Type what the item is; matching suggestions appear underneath and can be tapped. */
-export function ItemInput({ id, value, onChange, suggestions, label = "Item" }: {
+export function ItemInput({ id, value, onChange, suggestions, label = "Item", onEnter, autoFocus }: {
   id: string; value: string; onChange: (v: string) => void; suggestions: string[]; label?: string;
+  onEnter?: () => void; autoFocus?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const q = value.trim().toLowerCase();
@@ -26,7 +27,8 @@ export function ItemInput({ id, value, onChange, suggestions, label = "Item" }: 
         placeholder="Type: Suit, Blazer, Nehru Jacket…" className={inputCls}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 150)}
-        aria-describedby={`${id}-hint`}
+        aria-describedby={`${id}-hint`} autoFocus={autoFocus}
+        onKeyDown={(e) => { if (e.key === "Enter" && onEnter) { e.preventDefault(); onEnter(); } }}
       />
       <div id={`${id}-hint`} className={cn("mt-2 flex flex-wrap gap-2", !(focused && matches.length) && "hidden")} role="listbox" aria-label="Suggestions">
         {matches.map((m) => (
