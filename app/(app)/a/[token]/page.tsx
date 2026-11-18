@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Phone, UserPlus } from "lucide-react";
+import { Phone } from "lucide-react";
+import { SaveContact } from "@/components/save-contact";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
 import { STATUS_LABEL, daysSince, fmtDate, fmtDateTime, isOverdue, parseToken, rupees, tokenLabel } from "@/lib/format";
@@ -14,6 +15,7 @@ import { summarizeItems } from "@/lib/items";
 import { EditDetails } from "./edit-details";
 import { ItemsPanel, type ItemView } from "./items-panel";
 import { VisitPhotos } from "./visit-photos";
+import { DeleteEntry } from "./delete-entry";
 
 type Params = { token: string };
 
@@ -111,10 +113,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
             className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Phone className="size-5" aria-hidden />
           </a>
-          <a href={`/a/${label}/contact`} target="_blank" rel="noopener" aria-label={`Save ${a.customer.name} to phone contacts`}
-            className="flex size-11 items-center justify-center rounded-full border border-border bg-card">
-            <UserPlus className="size-5" aria-hidden />
-          </a>
+          <SaveContact variant="icon" name={a.customer.name} phone={a.customer.phone} token={label} shop={shop.shop_name} />
           <span className="text-sm font-normal text-muted">{a.customer.phone}</span>
         </p>
         <p className="text-sm font-medium">{summarizeItems(pieces.map((p) => ({ status: p.status, tailor: p.tailor?.name ?? null })))}</p>
@@ -184,6 +183,9 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
           </li>
         </ol>
       </section>
+      {me.role === "owner" && (
+        <DeleteEntry alterationId={a.id} label={label} customerName={a.customer.name} itemCount={pieces.length} />
+      )}
       <span className="sr-only">{STATUS_LABEL[a.status]}</span>
     </article>
   );

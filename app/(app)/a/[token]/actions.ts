@@ -86,3 +86,26 @@ export async function editCustomer(input: { id: string; name: string; phone: str
   if (error) return fail(error.code === "23505" ? "Another customer already has this number." : error.message);
   return ok();
 }
+
+/** Owner only: deletes the whole entry, including its photo files. */
+export async function deleteEntry(input: { alterationId: string; reason: string }): Promise<ActionResult> {
+  const me = await getMe();
+  if (me.role !== "owner") return fail("Only the owner can delete an entry.");
+  const supabase = await createClient();
+
+  // Collect the photo files first (visit photos, handover photos, and any old per-item photos).
+  const { data: a } = await supabase.from("alterations")
+    .select("photo_paths, alteration_pieces(photo_paths), alteration_events(photo_path)").eq("id", input.alterationId).maybeSingle();
+  if (!a) return fail("This entry no longer exists.");
+  const paths = [
+    ...((a.photo_paths as string[]) ?? []),
+    ...((a.alteration_pieces as { photo_paths: string[] }[]) ?? []).flatMap((p) => p.photo_paths ?? []),
+    ...((a.alteration_events as { photo_path: string | null }[]) ?? []).map((e) => e.photo_path).filter((x): x is string => !!x),
+  ];
+
+  const { error } = await supabase.rpc("delete_alteration", { p_id: input.alterationId, p_reason: input.reason.trim() || null });
+  if (error) return fail(error.message);
+  if (paths.length) await supabase.storage.from("item-photos").remove(paths); // best effort; the entry is already gone
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

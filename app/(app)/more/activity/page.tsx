@@ -10,7 +10,7 @@ import { itemsText } from "@/lib/messages";
 export const metadata: Metadata = { title: "Activity" };
 
 type Tok = { token_year: number; token_no: number; customer: { name: string } | null; alteration_pieces?: { id: string; item_type: string }[] } | null;
-type Item = { at: string; who: string; text: string; tok: Tok; kind: "status" | "edit" | "whatsapp" | "new" };
+type Item = { at: string; who: string; text: string; tok: Tok; kind: "status" | "edit" | "whatsapp" | "new" | "deleted" };
 
 const LIMIT = 200;
 const MSG_LABEL: Record<string, string> = { receipt: "Receipt", ready: "Ready", reminder: "Reminder", delay: "Delay", delivered: "Delivered" };
@@ -36,8 +36,11 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     .gte("created_at", lo).lte("created_at", hi).order("created_at", { ascending: false }).limit(LIMIT);
   if (staffId) { ev = ev.eq("actor_id", staffId); ml = ml.eq("opened_by", staffId); nw = nw.eq("created_by", staffId); }
 
-  const [{ data: events }, { data: msgs }, { data: news }, { data: people }] = await Promise.all([
-    ev, ml, nw, me.role === "owner" ? supabase.from("profiles").select("id,name").order("name") : Promise.resolve({ data: [] }),
+  let dl = supabase.from("deletion_log").select("id,deleted_at,token_label,customer_name,items,reason,deleted_by,who:profiles(name)")
+    .gte("deleted_at", lo).lte("deleted_at", hi).order("deleted_at", { ascending: false }).limit(LIMIT);
+  if (staffId) dl = dl.eq("deleted_by", staffId);
+  const [{ data: events }, { data: msgs }, { data: news }, { data: people }, { data: dels }] = await Promise.all([
+    ev, ml, nw, me.role === "owner" ? supabase.from("profiles").select("id,name").order("name") : Promise.resolve({ data: [] }), dl,
   ]);
 
   const items: Item[] = [
@@ -52,9 +55,13 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
       at: n.created_at, who: n.who?.name ?? "—", kind: "new", text: "Created token",
       tok: { token_year: n.token_year, token_no: n.token_no, customer: n.customer },
     })),
+    ...(dels ?? []).map((d: any): Item => ({
+      at: d.deleted_at, who: d.who?.name ?? "—", tok: null, kind: "deleted",
+      text: `Deleted entry #${d.token_label} (${d.customer_name}, ${d.items ?? "no items"})${d.reason ? `: ${d.reason}` : ""}`,
+    })),
   ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, LIMIT);
 
-  const dot: Record<Item["kind"], string> = { status: "bg-primary", edit: "bg-muted", whatsapp: "bg-[#128c4a]", new: "bg-amber-500" };
+  const dot: Record<Item["kind"], string> = { status: "bg-primary", edit: "bg-muted", whatsapp: "bg-[#128c4a]", new: "bg-amber-500", deleted: "bg-red-500" };
 
   return (
     <>

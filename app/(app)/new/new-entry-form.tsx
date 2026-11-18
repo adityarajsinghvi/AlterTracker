@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Camera, Check, Plus, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
+import { Camera, Check, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { SaveContact } from "@/components/save-contact";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/image";
 import { STATUS_LABEL, addDaysISO, fmtDate, normalizeItem } from "@/lib/format";
@@ -150,10 +151,7 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
         {receipt && (
           <WaButton alterationId={result.id} templateKey="receipt" label={receipt.label} href={receipt.href} disabledReason={receipt.disabledReason} />
         )}
-        <a href={`/a/${result.label}/contact`} target="_blank" rel="noopener"
-          className="flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card font-semibold active:opacity-80">
-          <UserPlus className="size-5" aria-hidden /> Save {result.customerName} to phone contacts
-        </a>
+        <SaveContact variant="button" name={result.customerName} phone={phone10} token={result.label} shop={shop.shop_name} />
         <Link href={`/a/${result.label}`} className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">Open token</Link>
         <Link href="/" className="flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold">Back to Home</Link>
         <button type="button" onClick={() => location.assign("/new")} className="h-12 w-full font-medium text-primary">+ Another entry</button>
