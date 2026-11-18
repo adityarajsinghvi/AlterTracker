@@ -52,7 +52,16 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-export const ITEM_TYPES = ["Suit", "Blazer", "Sherwani", "Jodhpuri", "Kurta", "Trouser", "Shirt", "Other"] as const;
+/** Starting suggestions; items the shop has used before are added automatically. */
+export const DEFAULT_ITEMS = [
+  "Suit", "Blazer", "Sherwani", "Jodhpuri", "Kurta", "Trouser", "Shirt", "Waistcoat", "Coat", "Pant", "Jeans",
+  "Pajama", "Pathani", "Nehru Jacket", "Indo-Western", "Tuxedo", "Overcoat", "T-Shirt", "Safari Suit", "Achkan",
+];
+
+/** "nehru  JACKET" -> "Nehru Jacket" */
+export function normalizeItem(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ").toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+}
 
 export function itemsSummary(types: string[]): string {
   return types.join(" + ");

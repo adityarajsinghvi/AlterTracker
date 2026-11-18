@@ -12,9 +12,13 @@ export type MsgAlteration = {
 
 /** "Blazer + 2 Trouser" */
 export function itemsText(types: string[]): string {
-  const counts = new Map<string, number>();
-  types.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
-  return [...counts].map(([t, n]) => (n > 1 ? `${n} ${t}` : t)).join(" + ");
+  const counts = new Map<string, { name: string; n: number }>();
+  types.forEach((t) => {
+    const k = t.trim().toLowerCase();
+    const c = counts.get(k);
+    if (c) c.n++; else counts.set(k, { name: t.trim(), n: 1 });
+  });
+  return [...counts.values()].map(({ name, n }) => (n > 1 ? `${n} ${name}` : name)).join(" + ");
 }
 
 export function publicLink(shop: Pick<Shop, "public_base_url">, slug: string): string {

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
 import { isValidPhone, normalizePhone } from "@/lib/auth";
+import { normalizeItem } from "@/lib/format";
 import type { ActionResult, Status } from "@/lib/types";
 
 function fail(message: string): { ok: false; error: string } {
@@ -43,9 +44,11 @@ export async function saveAlteration(input: {
 
 export async function savePiece(input: { id: string; itemType: string; description: string; workNotes: string }): Promise<ActionResult> {
   if (!input.workNotes.trim()) return fail("Work notes cannot be empty.");
+  const itemType = normalizeItem(input.itemType);
+  if (!itemType || itemType.length > 40) return fail("Write what the item is (up to 40 letters).");
   const supabase = await createClient();
   const { error } = await supabase.from("alteration_pieces").update({
-    item_type: input.itemType, description: input.description.trim() || null, work_notes: input.workNotes.trim(),
+    item_type: itemType, description: input.description.trim() || null, work_notes: input.workNotes.trim(),
   }).eq("id", input.id);
   if (error) return fail(error.message);
   revalidatePath("/", "layout");

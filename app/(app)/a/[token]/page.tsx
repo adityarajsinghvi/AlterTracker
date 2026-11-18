@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui";
 import { PieceCard, type PieceView } from "./piece-card";
 import { WaButton } from "@/components/wa-button";
 import { getMessageContext } from "@/lib/message-data";
+import { getItemSuggestions } from "@/lib/item-suggestions";
 import { messageButtons } from "@/lib/messages";
 import { TokenActions } from "./token-actions";
 
@@ -30,7 +31,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
   if (!parsed) notFound();
   const supabase = await createClient();
   // Ask for everything at once (one round trip deep), then sign photo links.
-  const [me, { data: a }, { data: tailors }, { templates, shop }] = await Promise.all([
+  const [me, { data: a }, { data: tailors }, { templates, shop }, itemSuggestions] = await Promise.all([
     getMe(),
     supabase
     .from("alterations")
@@ -42,6 +43,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
     supabase.from("tailors").select("id,name,is_in_house").eq("active", true)
       .order("is_in_house", { ascending: false }).order("name"),
     getMessageContext(),
+    getItemSuggestions(),
   ]);
   if (!a) notFound();
 
@@ -104,7 +106,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
 
       <section aria-label="Pieces" className="space-y-3">
         {pieces.map((p) => (
-          <PieceCard key={p.id} piece={p} alterationId={a.id} closed={closed}
+          <PieceCard key={p.id} piece={p} alterationId={a.id} closed={closed} itemSuggestions={itemSuggestions}
             photoUrls={p.photo_paths.map((x) => signed.get(x)).filter((x): x is string => !!x)} />
         ))}
       </section>

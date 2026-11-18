@@ -1,7 +1,7 @@
 "use server";
 import { createClient } from "@/lib/supabase/server";
 import { isValidPhone, normalizePhone } from "@/lib/auth";
-import { tokenLabel } from "@/lib/format";
+import { normalizeItem, tokenLabel } from "@/lib/format";
 import type { ActionResult } from "@/lib/types";
 
 export type CustomerLookup = {
@@ -55,7 +55,7 @@ export async function createEntry(input: NewEntryInput): Promise<NewEntryResult>
     p_phone: phone,
     p_name: input.name,
     p_promised: input.promised,
-    p_pieces: input.pieces,
+    p_pieces: input.pieces.map((p) => ({ ...p, item_type: normalizeItem(p.item_type) })),
     p_tailor: input.tailorId,
     p_charge: input.charge,
     p_paid: input.paid,

@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { Camera, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/image";
-import { ITEM_TYPES } from "@/lib/format";
+import { normalizeItem } from "@/lib/format";
+import { ItemInput } from "@/components/item-input";
 import { Sheet } from "@/components/sheet";
 import { Btn, Field, inputCls } from "@/components/ui";
 import { attachPhotos, savePiece } from "./actions";
@@ -13,8 +14,8 @@ export type PieceView = {
   id: string; item_type: string; description: string | null; work_notes: string; photo_pending: boolean; photo_paths: string[];
 };
 
-export function PieceCard({ piece, alterationId, closed, photoUrls }: {
-  piece: PieceView; alterationId: string; closed: boolean; photoUrls: string[];
+export function PieceCard({ piece, alterationId, closed, photoUrls, itemSuggestions }: {
+  piece: PieceView; alterationId: string; closed: boolean; photoUrls: string[]; itemSuggestions: string[];
 }) {
   const router = useRouter();
   const [zoom, setZoom] = useState<string | null>(null);
@@ -88,12 +89,12 @@ export function PieceCard({ piece, alterationId, closed, photoUrls }: {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {zoom && <img src={zoom} alt={`${piece.item_type} photo, enlarged`} className="max-h-[70dvh] w-full rounded-lg object-contain" />}
       </Sheet>
-      <EditPiece key={piece.item_type + piece.description + piece.work_notes} piece={piece} open={editing} onClose={() => setEditing(false)} />
+      <EditPiece key={piece.item_type + piece.description + piece.work_notes} piece={piece} suggestions={itemSuggestions} open={editing} onClose={() => setEditing(false)} />
     </div>
   );
 }
 
-function EditPiece({ piece, open, onClose }: { piece: PieceView; open: boolean; onClose: () => void }) {
+function EditPiece({ piece, open, onClose, suggestions }: { piece: PieceView; open: boolean; onClose: () => void; suggestions: string[] }) {
   const router = useRouter();
   const [type, setType] = useState(piece.item_type);
   const [desc, setDesc] = useState(piece.description ?? "");
@@ -104,7 +105,7 @@ function EditPiece({ piece, open, onClose }: { piece: PieceView; open: boolean; 
   async function save() {
     setBusy(true); setErr(null);
     try {
-      const r = await savePiece({ id: piece.id, itemType: type, description: desc, workNotes: notes });
+      const r = await savePiece({ id: piece.id, itemType: normalizeItem(type), description: desc, workNotes: notes });
       if (!r.ok) { setErr(r.error); return; }
       onClose(); router.refresh();
     } catch { setErr("No internet connection. Please try again."); } finally { setBusy(false); }
@@ -113,11 +114,7 @@ function EditPiece({ piece, open, onClose }: { piece: PieceView; open: boolean; 
   return (
     <Sheet open={open} onClose={onClose} title="Edit piece">
       <div className="space-y-3">
-        <Field label="Type" htmlFor="pt">
-          <select id="pt" value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
-            {ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </Field>
+        <ItemInput id="pt" label="What is it?" value={type} onChange={setType} suggestions={suggestions} />
         <Field label="Description" htmlFor="pd"><input id="pd" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputCls} /></Field>
         <Field label="Work to be done" htmlFor="pn">
           <textarea id="pn" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={`${inputCls} h-auto py-3`} />

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Camera, Plus, Trash2, TriangleAlert, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/image";
-import { ITEM_TYPES, STATUS_LABEL, addDaysISO, fmtDate } from "@/lib/format";
+import { STATUS_LABEL, addDaysISO, fmtDate, normalizeItem } from "@/lib/format";
+import { ItemInput } from "@/components/item-input";
 import { normalizePhone, isValidPhone } from "@/lib/auth";
 import type { Tailor } from "@/lib/types";
 import { Btn, Field, inputCls } from "@/components/ui";
@@ -17,7 +18,7 @@ type PieceDraft = { key: string; type: string; notes: string; description: strin
 let pieceCounter = 0;
 const newPiece = (): PieceDraft => ({ key: `p${pieceCounter++}`, type: "", notes: "", description: "", photos: [] });
 
-export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tailor[]; today: string; templates: Template[]; shop: Shop }) {
+export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions }: { tailors: Tailor[]; today: string; templates: Template[]; shop: Shop; itemSuggestions: string[] }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [lookup, setLookup] = useState<CustomerLookup | null>(null);
@@ -57,7 +58,7 @@ export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tai
     if (!isValidPhone(phone10)) return "Enter a valid 10-digit mobile number.";
     if (!existing && !name.trim()) return "Enter the customer's name.";
     for (const [i, p] of pieces.entries()) {
-      if (!p.type) return `Piece ${i + 1}: choose what it is (Suit, Shirt…).`;
+      if (!p.type.trim()) return `Piece ${i + 1}: write what it is (Suit, Shirt…).`;
       if (!p.notes.trim()) return `Piece ${i + 1}: write the work to be done.`;
     }
     if (!promised) return "Choose a promised date.";
@@ -72,7 +73,7 @@ export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tai
     try {
       const res = await createEntry({
         phone: phone10, name: name.trim(), promised,
-        pieces: pieces.map((p) => ({ item_type: p.type, work_notes: p.notes.trim(), description: p.description.trim() || undefined, has_photo: p.photos.length > 0 })),
+        pieces: pieces.map((p) => ({ item_type: normalizeItem(p.type), work_notes: p.notes.trim(), description: p.description.trim() || undefined, has_photo: p.photos.length > 0 })),
         tailorId: tailorId || null,
         charge: charge.trim() === "" ? null : Number(charge),
         paid, rack: rack.trim(),
@@ -113,7 +114,7 @@ export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tai
     const receipt = receiptButton({
       token_year: result.tokenYear, token_no: result.tokenNo, status: "received", public_slug: result.slug,
       promised_date: promised, ready_at: null, delivered_at: null, collected_by_name: null,
-      customerName: result.customerName, customerPhone: phone10, itemTypes: pieces.map((p) => p.type),
+      customerName: result.customerName, customerPhone: phone10, itemTypes: pieces.map((p) => normalizeItem(p.type)),
     }, templates, shop);
     return (
       <section className="space-y-5 text-center" aria-live="polite">
@@ -191,15 +192,7 @@ export function NewEntryForm({ tailors, today, templates, shop }: { tailors: Tai
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={`Piece ${i + 1} type`}>
-              {ITEM_TYPES.map((t) => (
-                <button key={t} type="button" role="radio" aria-checked={p.type === t} onClick={() => updatePiece(p.key, { type: t })}
-                  className={cn("h-11 rounded-full border px-4 text-sm font-medium",
-                    p.type === t ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
-                  {t}
-                </button>
-              ))}
-            </div>
+            <ItemInput id={`type-${p.key}`} label={`What is piece ${i + 1}?`} value={p.type} onChange={(v) => updatePiece(p.key, { type: v })} suggestions={itemSuggestions} />
             <Field label="Work to be done" htmlFor={`notes-${p.key}`}>
               <textarea id={`notes-${p.key}`} rows={2} value={p.notes} onChange={(e) => updatePiece(p.key, { notes: e.target.value })}
                 placeholder="e.g. Sleeves short 1 inch, taper waist" className={cn(inputCls, "h-auto py-3")} />
