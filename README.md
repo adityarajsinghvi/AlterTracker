@@ -20,5 +20,5 @@ Staff log in with their name and a 4-digit PIN. Add staff in More > Staff, or: `
 - Normal: `npm run deploy` (needs `npx wrangler login`, then `npx wrangler secret put AUTH_PIN_PEPPER`).
 - Fallback: `npm run deploy:embedded` bundles the static files into the worker (`scripts/embed-assets.mjs`,
   `scripts/worker-embedded.js`, `wrangler.embedded.jsonc`) for when the static-assets upload is unavailable.
-- Secrets on the worker: `AUTH_PIN_PEPPER` (required), `SUPABASE_SERVICE_ROLE_KEY` (needed for photos on the public page).
+- Secrets on the worker: `AUTH_PIN_PEPPER` (required), `PHOTO_SIGNER_PASSWORD` (photos on the customer page; a photo-only account, safer than the service-role key).
 - Live: https://altertracker.singhviaditya2.workers.dev

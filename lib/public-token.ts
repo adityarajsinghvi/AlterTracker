@@ -24,11 +24,33 @@ export const getPublicToken = cache(async (slug: string): Promise<PublicToken | 
   return (data as PublicToken | null) ?? null;
 });
 
-/** Short-lived (1 hour) signed URLs for the photos. Needs the service-role key; without it, photos are skipped. */
+// Photo links are made by a dedicated photo-only account (it has no profile, so it can read no data and may only
+// read files in the photo bucket). If SUPABASE_SERVICE_ROLE_KEY is set it is used instead.
+const SIGNER_EMAIL = "photo-signer@staff.singhvi.local";
+let signerSession: { token: string; expiresAt: number } | null = null;
+
+async function signerClient() {
+  const password = process.env.PHOTO_SIGNER_PASSWORD;
+  if (!password) return null;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+  const plain = { auth: { persistSession: false, autoRefreshToken: false } };
+  if (!signerSession || signerSession.expiresAt < Date.now() + 60_000) {
+    const { data, error } = await createClient(url, key, plain).auth.signInWithPassword({ email: SIGNER_EMAIL, password });
+    if (error || !data.session) { console.error("photo signer sign-in failed:", error?.message); return null; }
+    signerSession = { token: data.session.access_token, expiresAt: (data.session.expires_at ?? 0) * 1000 };
+  }
+  return createClient(url, key, { ...plain, global: { headers: { Authorization: `Bearer ${signerSession.token}` } } });
+}
+
+/** Short-lived (1 hour) signed URLs for the photos. Without a signing account or key, photos are skipped. */
 export async function signPhotos(paths: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  if (!paths.length || !process.env.SUPABASE_SERVICE_ROLE_KEY) return out;
-  const { data } = await createAdminClient().storage.from("item-photos").createSignedUrls(paths, 3600);
-  data?.forEach((s) => { if (s.path && s.signedUrl) out.set(s.path, s.signedUrl); });
+  if (!paths.length) return out;
+  const client = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : await signerClient();
+  if (!client) return out;
+  const { data, error } = await client.storage.from("item-photos").createSignedUrls(paths, 3600);
+  if (error) console.error("photo signing failed:", error.message);
+  data?.forEach((x) => { if (x.path && x.signedUrl) out.set(x.path, x.signedUrl); });
   return out;
 }
