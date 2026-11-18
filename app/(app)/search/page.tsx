@@ -19,7 +19,7 @@ type Tok = {
   alteration_pieces: Piece[];
 };
 
-/** "Shirt + Trouser collected by Papa on 18 Nov, 4:12 pm" — one line per handover. */
+/** "Shirt + Trouser delivered to Papa on 18 Nov, 4:12 pm" — one line per handover. */
 function handovers(pieces: Piece[]): string[] {
   const groups = new Map<string, Piece[]>();
   pieces.filter((p) => p.status === "delivered" && p.delivered_at).forEach((p) => {
@@ -27,7 +27,7 @@ function handovers(pieces: Piece[]): string[] {
     groups.set(k, [...(groups.get(k) ?? []), p]);
   });
   return [...groups.values()].sort((x, y) => (x[0].delivered_at! < y[0].delivered_at! ? -1 : 1))
-    .map((g) => `${itemsText(g.map((p) => p.item_type))} collected by ${g[0].collected_by_name} on ${fmtDateTime(g[0].delivered_at!)}`);
+    .map((g) => `${itemsText(g.map((p) => p.item_type))} delivered to ${g[0].collected_by_name} on ${fmtDateTime(g[0].delivered_at!)}`);
 }
 type Cust = { id: string; name: string; phone: string; alterations: Tok[] };
 

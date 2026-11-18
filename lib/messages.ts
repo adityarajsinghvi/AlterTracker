@@ -38,7 +38,7 @@ const LABEL: Record<string, string> = {
   ready: "Tell customer items are ready",
   reminder: "Send pickup reminder",
   delay: "Send delay notice",
-  delivered: "Send collection confirmation",
+  delivered: "Send delivery confirmation",
 };
 
 const max = (xs: (string | null)[]) => xs.filter((x): x is string => !!x).sort().at(-1) ?? null;

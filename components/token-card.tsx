@@ -36,11 +36,11 @@ export function TokenCard({ a, templates, shop, tab }: { a: CardRow; templates: 
   const oldest = (list: CardPiece[], f: (p: CardPiece) => string | null) => list.map(f).filter((x): x is string => !!x).sort()[0] ?? null;
   const readyDays = daysSince(oldest(of("ready"), (p) => p.ready_at));
   const outDays = daysSince(oldest(of("with_tailor"), (p) => p.sent_to_tailor_at));
-  const shopDays = daysSince(oldest(of("received"), (p) => p.status_at));
+  const shopDays = daysSince(oldest([...of("received"), ...of("ready")], (p) => p.status_at));
   const stale = of("ready").length > 0 && readyDays >= STALE_DAYS;
   const when = tab === "ready" ? `Ready ${readyDays === 0 ? "today" : `${readyDays}d`}`
-    : tab === "tailor" ? `Out ${outDays === 0 ? "today" : `${outDays}d`}`
-    : tab === "received" ? `In shop ${shopDays === 0 ? "today" : `${shopDays}d`}` : null;
+    : tab === "tailor" ? `At alter ${outDays === 0 ? "today" : `${outDays}d`}`
+    : tab === "received" ? `At shop ${shopDays === 0 ? "today" : `${shopDays}d`}` : null;
 
   const msgs = [...a.messages].sort((x, y) => y.id - x.id);
   const buttons = messageButtons({

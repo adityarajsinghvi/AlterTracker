@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { key: "today", label: "Due today" },
   { key: "overdue", label: "Overdue" },
-  { key: "received", label: "Received" },
-  { key: "tailor", label: "With tailor" },
+  { key: "received", label: "At shop" },
+  { key: "tailor", label: "At alter" },
   { key: "ready", label: "Ready" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
@@ -20,8 +20,8 @@ type TabKey = (typeof TABS)[number]["key"];
 const EMPTY: Record<TabKey, string> = {
   today: "Nothing is due today.",
   overdue: "Nothing is overdue. Well done!",
-  received: "Nothing is waiting at the shop to be sent out.",
-  tailor: "Nothing is with a tailor right now.",
+  received: "Nothing is at the shop right now.",
+  tailor: "Nothing is at alter right now.",
   ready: "No ready items waiting for pickup.",
 };
 
@@ -45,7 +45,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const lists: Record<TabKey, CardRow[]> = {
     today: rows.filter((a) => has(a, "received", "with_tailor") && a.promised_date === today).sort((x, y) => x.token_no - y.token_no),
     overdue: rows.filter((a) => has(a, "received", "with_tailor") && a.promised_date < today).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
-    received: rows.filter((a) => has(a, "received")).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
+    received: rows.filter((a) => has(a, "received", "ready")).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
     tailor: rows.filter((a) => has(a, "with_tailor")).sort((x, y) => age(x, "with_tailor", "sent_to_tailor_at").localeCompare(age(y, "with_tailor", "sent_to_tailor_at"))),
     ready: rows.filter((a) => has(a, "ready")).sort((x, y) => age(x, "ready", "ready_at").localeCompare(age(y, "ready", "ready_at"))),
   };

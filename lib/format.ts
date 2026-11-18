@@ -44,9 +44,10 @@ export function isOverdue(promised: string, status: string): boolean {
   return (status === "received" || status === "with_tailor") && promised < todayIST();
 }
 
+/** The 3 steps: At shop -> At alter -> Delivered. "ready" is not a step: it is the green "Ready" tag on an item that is at the shop. */
 export const STATUS_LABEL: Record<string, string> = {
-  received: "Received",
-  with_tailor: "With tailor",
+  received: "At shop",
+  with_tailor: "At alter",
   ready: "Ready",
   delivered: "Delivered",
   cancelled: "Cancelled",

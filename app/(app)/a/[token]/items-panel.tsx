@@ -17,15 +17,16 @@ export type ItemView = {
   days: number; collectedBy: string | null; deliveredAt: string | null; redo: number; cancelReason: string | null;
 };
 type SheetName = "tailor" | "ready" | "redo" | "handover" | "owner" | "add" | null;
+type ReadyFor = { ids: string[]; title: string; blurb: string };
 const OPEN: Status[] = ["received", "with_tailor", "ready"];
 
 function detail(i: ItemView): string {
   const d = i.days === 0 ? "today" : `${i.days}d`;
   switch (i.status) {
-    case "received": return `In shop · ${d}`;
-    case "with_tailor": return `${i.tailorName ?? "Tailor"} · out ${d}`;
-    case "ready": return `Waiting for pickup · ${d}`;
-    case "delivered": return `Collected by ${i.collectedBy ?? "customer"}${i.deliveredAt ? `, ${i.deliveredAt}` : ""}`;
+    case "received": return `At shop · ${d}`;
+    case "with_tailor": return `At alter${i.tailorName ? ` (${i.tailorName})` : ""} · ${d}`;
+    case "ready": return `Ready for pickup · ${d}`;
+    case "delivered": return `Delivered to ${i.collectedBy ?? "customer"}${i.deliveredAt ? `, ${i.deliveredAt}` : ""}`;
     default: return `Cancelled${i.cancelReason ? `: ${i.cancelReason}` : ""}`;
   }
 }
@@ -51,15 +52,18 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
   const [newName, setNewName] = useState("");
   const [newNote, setNewNote] = useState("");
   const [editing, setEditing] = useState<ItemView | null>(null);
+  const [readyFor, setReadyFor] = useState<ReadyFor | null>(null);
 
   const open = (s: SheetName) => { setErr(null); setSheet(s); };
   const close = () => { setSheet(null); setEditing(null); };
   const selectable = (i: ItemView) => OPEN.includes(i.status) || (role === "owner" && i.status === "delivered");
   const sel = items.filter((i) => selected.has(i.id) && selectable(i));
   const ids = (f: (i: ItemView) => boolean) => sel.filter(f).map((i) => i.id);
-  const sendIds = ids((i) => i.status === "received");
-  const readyIds = ids((i) => i.status === "received" || i.status === "with_tailor");
-  const handIds = ids((i) => i.status === "ready");
+  const sendIds = ids((i) => i.status === "received");                          // at shop, not yet ready -> send to alter
+  const backIds = ids((i) => i.status === "with_tailor");                       // at alter -> back from alter (becomes Ready)
+  const markIds = sendIds;                                                      // at shop -> mark ready (done in the shop)
+  const handIds = ids((i) => i.status === "received" || i.status === "ready");  // anything at the shop can be delivered
+  const redoIds = ids((i) => i.status === "ready");                             // ready but not right -> send back
   const unpaid = charge != null && !paid;
   const seen = Object.fromEntries(items.map((i) => [i.id, i.status])) as Record<string, Status>;
   const count = (s: Status) => items.filter((i) => i.status === s).length;
@@ -128,9 +132,13 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Quick select">
         <button type="button" onClick={() => pick(() => true)} className="h-9 rounded-full border border-border px-3 text-sm font-medium">All</button>
-        {(["received", "with_tailor", "ready"] as Status[]).filter((s) => count(s) > 0).map((s) => (
-          <button key={s} type="button" onClick={() => pick((i) => i.status === s)} className="h-9 rounded-full border border-border px-3 text-sm font-medium">
-            {STATUS_LABEL[s]} ({count(s)})
+        {[
+          { label: "At shop", n: count("received") + count("ready"), f: (i: ItemView) => i.status === "received" || i.status === "ready" },
+          { label: "At alter", n: count("with_tailor"), f: (i: ItemView) => i.status === "with_tailor" },
+          { label: "Ready", n: count("ready"), f: (i: ItemView) => i.status === "ready" },
+        ].filter((c) => c.n > 0).map((c) => (
+          <button key={c.label} type="button" onClick={() => pick(c.f)} className="h-9 rounded-full border border-border px-3 text-sm font-medium">
+            {c.label} ({c.n})
           </button>
         ))}
         {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="h-9 rounded-full px-3 text-sm font-medium text-muted">Clear</button>}
@@ -171,40 +179,41 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
           <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-3 shadow-xl">
             <p className="mb-2 text-sm font-semibold">{sel.length} selected</p>
             <div className="grid grid-cols-2 gap-2">
-              {sendIds.length > 0 && <Btn className="h-11 text-sm" onClick={() => { setTailorId(""); open("tailor"); }}>Send to tailor ({sendIds.length})</Btn>}
-              {readyIds.length > 0 && <Btn className="h-11 text-sm" variant={sendIds.length ? "secondary" : "primary"} onClick={() => open("ready")}>Mark ready ({readyIds.length})</Btn>}
+              {sendIds.length > 0 && <Btn className="h-11 text-sm" onClick={() => { setTailorId(""); open("tailor"); }}>Send to alter ({sendIds.length})</Btn>}
+              {backIds.length > 0 && <Btn className="h-11 text-sm" onClick={() => { setReadyFor({ ids: backIds, title: `${backIds.length} back from alter`, blurb: "Confirm they are back from the tailor. They will show as Ready for pickup." }); open("ready"); }}>Back from alter ({backIds.length})</Btn>}
+              {markIds.length > 0 && <Btn className="h-11 text-sm" variant="secondary" onClick={() => { setReadyFor({ ids: markIds, title: `Mark ${markIds.length} ready`, blurb: "Use this when the work was done in the shop and the item is waiting for the customer." }); open("ready"); }}>Mark ready ({markIds.length})</Btn>}
               {handIds.length > 0 && <Btn className="h-11 text-sm" onClick={() => { setWho("customer"); setReceivedNow(true); open("handover"); }}>Hand over ({handIds.length})</Btn>}
-              {handIds.length > 0 && <Btn className="h-11 text-sm" variant="secondary" onClick={() => { setTailorId(""); setReason(""); open("redo"); }}>Needs redo ({handIds.length})</Btn>}
+              {redoIds.length > 0 && <Btn className="h-11 text-sm" variant="secondary" onClick={() => { setTailorId(""); setReason(""); open("redo"); }}>Needs redo ({redoIds.length})</Btn>}
               {role === "owner" && <Btn className="h-11 text-sm" variant="secondary" onClick={() => { setReason(""); setTarget(""); setTailorId(""); open("owner"); }}>Owner actions</Btn>}
             </div>
           </div>
         </div>
       )}
 
-      <Sheet open={sheet === "tailor"} onClose={close} title={`Send ${sendIds.length} to tailor`}>
+      <Sheet open={sheet === "tailor"} onClose={close} title={`Send ${sendIds.length} to alter`}>
         <div className="space-y-3">
           <p className="text-sm text-muted">{names(sendIds)}</p>
           {tailorSelect()}{errorLine}
-          <Btn disabled={busy || !tailorId} onClick={() => move("with_tailor", sendIds, { tailorId })}>{busy ? "Saving…" : "Send to tailor"}</Btn>
+          <Btn disabled={busy || !tailorId} onClick={() => move("with_tailor", sendIds, { tailorId })}>{busy ? "Saving…" : "Send to alter"}</Btn>
         </div>
       </Sheet>
 
-      <Sheet open={sheet === "ready"} onClose={close} title={`Mark ${readyIds.length} ready`}>
+      <Sheet open={sheet === "ready"} onClose={close} title={readyFor?.title ?? "Mark ready"}>
         <div className="space-y-3">
-          <p className="text-sm text-muted">{names(readyIds)}</p>
-          <p className="text-sm text-muted">Confirm they are back and on the pickup shelf.</p>
+          <p className="text-sm text-muted">{names(readyFor?.ids ?? [])}</p>
+          <p className="text-sm text-muted">{readyFor?.blurb}</p>
           <Field label="Rack / shelf label (optional)" htmlFor="rack-ready"><input id="rack-ready" value={rack} onChange={(e) => setRack(e.target.value)} className={inputCls} /></Field>
           {errorLine}
-          <Btn disabled={busy} onClick={() => move("ready", readyIds, { rack })}>{busy ? "Saving…" : "Mark ready"}</Btn>
+          <Btn disabled={busy} onClick={() => move("ready", readyFor?.ids ?? [], { rack })}>{busy ? "Saving…" : "Confirm"}</Btn>
         </div>
       </Sheet>
 
-      <Sheet open={sheet === "redo"} onClose={close} title={`Redo ${handIds.length} item${handIds.length === 1 ? "" : "s"}`}>
+      <Sheet open={sheet === "redo"} onClose={close} title={`Redo ${redoIds.length} item${redoIds.length === 1 ? "" : "s"}`}>
         <div className="space-y-3">
-          <p className="text-sm text-muted">{names(handIds)}</p>
+          <p className="text-sm text-muted">{names(redoIds)}</p>
           <Field label="What is wrong?" htmlFor="redo-reason"><input id="redo-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. waist still loose" className={inputCls} /></Field>
           {tailorSelect({ sameOption: true })}{errorLine}
-          <Btn disabled={busy || !reason.trim()} onClick={() => move("with_tailor", handIds, { note: reason, tailorId })}>{busy ? "Saving…" : "Send back to tailor"}</Btn>
+          <Btn disabled={busy || !reason.trim()} onClick={() => move("with_tailor", redoIds, { note: reason, tailorId })}>{busy ? "Saving…" : "Send back to alter"}</Btn>
         </div>
       </Sheet>
 
@@ -240,7 +249,7 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
           <Field label="Move back to" htmlFor="owner-target">
             <select id="owner-target" value={target} onChange={(e) => setTarget(e.target.value as Status)} className={inputCls}>
               <option value="">Choose…</option>
-              <option value="received">Received</option><option value="with_tailor">With tailor</option><option value="ready">Ready</option>
+              <option value="received">At shop</option><option value="with_tailor">At alter</option><option value="ready">At shop · Ready</option>
             </select>
           </Field>
           {target === "with_tailor" && tailorSelect({ sameOption: true })}

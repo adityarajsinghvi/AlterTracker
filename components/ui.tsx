@@ -36,5 +36,14 @@ const badge: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  // Three steps only. An item that is back from the tailor is still "At shop", with a green Ready tag.
+  if (status === "ready") {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold", badge.received)}>{STATUS_LABEL.received}</span>
+        <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold", badge.ready)}>Ready</span>
+      </span>
+    );
+  }
   return <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold", badge[status])}>{STATUS_LABEL[status]}</span>;
 }

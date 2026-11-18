@@ -33,12 +33,14 @@ type EventRow = {
 };
 
 const VERB: Record<string, string> = {
-  with_tailor: "Sent to tailor", ready: "Marked ready", delivered: "Handed over", received: "Moved back to received", cancelled: "Cancelled",
+  with_tailor: "Sent to alter", ready: "Marked ready", delivered: "Delivered", received: "Moved back to At shop", cancelled: "Cancelled",
 };
 
 function eventTitle(e: EventRow, names: Map<string, string>): string {
   if (e.kind !== "status" || !e.to_status) return e.note ?? "Edited";
-  const verb = e.from_status === "ready" && e.to_status === "with_tailor" ? "Redo: sent back to tailor" : VERB[e.to_status];
+  const verb = e.from_status === "ready" && e.to_status === "with_tailor" ? "Redo: sent back to alter"
+    : e.from_status === "with_tailor" && e.to_status === "ready" ? "Back from alter (ready)"
+    : VERB[e.to_status];
   const list = e.piece_ids?.length ? itemsText(e.piece_ids.map((id) => names.get(id) ?? "item")) : "all items";
   return `${verb}: ${list}`;
 }

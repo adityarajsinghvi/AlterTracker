@@ -7,23 +7,23 @@ import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-// The journey of every item. The names are friendly and never reveal who does the work.
+// The journey of every item is three steps. "Ready for pickup" is a green tag on an item that is at the shop.
+// The names never reveal who does the work.
 const STEPS = [
   { key: "received", label: "At shop" },
-  { key: "with_tailor", label: "Altering" },
-  { key: "ready", label: "Ready" },
-  { key: "delivered", label: "Collected" },
+  { key: "with_tailor", label: "At alter" },
+  { key: "delivered", label: "Delivered" },
 ];
+const STEP_OF: Record<string, number> = { received: 0, ready: 0, with_tailor: 1, delivered: 2 };
 const BAR: Record<string, string> = {
-  received: "bg-amber-500", with_tailor: "bg-sky-500", ready: "bg-emerald-500", delivered: "bg-primary", cancelled: "bg-red-400",
+  received: "bg-amber-500", ready: "bg-emerald-500", with_tailor: "bg-sky-500", delivered: "bg-primary", cancelled: "bg-red-400",
 };
 
-// What the customer sees per item. Never the tailor's name.
 const ITEM_STATUS: Record<string, { label: string; cls: string }> = {
-  received: { label: "At the shop", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
-  with_tailor: { label: "Being altered", cls: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" },
+  received: { label: "At shop", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
+  with_tailor: { label: "At alter", cls: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" },
   ready: { label: "Ready for pickup", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100" },
-  delivered: { label: "Collected", cls: "bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-100" },
+  delivered: { label: "Delivered", cls: "bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-100" },
   cancelled: { label: "Cancelled", cls: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" },
 };
 
@@ -57,9 +57,10 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
   const n = (s: string) => live.filter((p) => p.status === s).length;
   const pending = n("received") + n("with_tailor");
   const summary = [
-    n("delivered") ? `${n("delivered")} collected` : "",
+    n("delivered") ? `${n("delivered")} delivered` : "",
     n("ready") ? `${n("ready")} ready for pickup` : "",
-    pending ? `${pending} still being worked on` : "",
+    n("with_tailor") ? `${n("with_tailor")} at alter` : "",
+    n("received") ? `${n("received")} at shop` : "",
   ].filter(Boolean).join(" · ");
 
   return (
@@ -96,8 +97,8 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
           )}
           {t.status === "delivered" && t.delivered_at && (
             <>
-              <div className="flex justify-between"><dt className="text-muted">Last collected on</dt><dd className="font-semibold">{fmtDateTime(t.delivered_at)}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">Collected by</dt><dd className="font-semibold">{t.collected_by}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Last delivered on</dt><dd className="font-semibold">{fmtDateTime(t.delivered_at)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Received by</dt><dd className="font-semibold">{t.collected_by}</dd></div>
             </>
           )}
         </dl>
@@ -124,20 +125,20 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
               </div>
               {p.work_notes && <p className="mt-1 whitespace-pre-wrap text-sm">{p.work_notes}</p>}
               {p.status !== "cancelled" && (
-                <ol className="mt-3 grid grid-cols-4 gap-1" aria-label={`${p.item_type}: ${st.label}`}>
-                  {STEPS.map((s, k) => {
-                    const at = STEPS.findIndex((x) => x.key === p.status);
+                <ol className="mt-3 grid grid-cols-3 gap-1" aria-label={`${p.item_type}: ${st.label}`}>
+                  {STEPS.map((step, k) => {
+                    const at = STEP_OF[p.status] ?? 0;
                     return (
-                      <li key={s.key} aria-current={k === at ? "step" : undefined} className="space-y-1">
+                      <li key={step.key} aria-current={k === at ? "step" : undefined} className="space-y-1">
                         <span className={cn("block h-1.5 rounded-full", k <= at ? BAR[p.status] : "bg-border")} />
-                        <span className={cn("block text-[11px] leading-tight", k === at ? "font-semibold text-foreground" : "text-muted")}>{s.label}</span>
+                        <span className={cn("block text-[11px] leading-tight", k === at ? "font-semibold text-foreground" : "text-muted")}>{step.label}</span>
                       </li>
                     );
                   })}
                 </ol>
               )}
               {p.status === "delivered" && p.delivered_at && (
-                <p className="mt-1 text-xs text-muted">Collected {fmtDateTime(p.delivered_at)}{p.collected_by ? ` by ${p.collected_by}` : ""}</p>
+                <p className="mt-1 text-xs text-muted">Delivered {fmtDateTime(p.delivered_at)}{p.collected_by ? ` to ${p.collected_by}` : ""}</p>
               )}
               {(p.photo_paths ?? []).some((x) => photos.get(x)) && (
                 <div className="mt-2 flex flex-wrap gap-2">
