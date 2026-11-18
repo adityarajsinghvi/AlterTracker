@@ -5,10 +5,11 @@ import { Btn, inputCls } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
 import { STATUS_LABEL, addDaysISO, fmtDateTime, todayIST, tokenLabel } from "@/lib/format";
+import { itemsText } from "@/lib/messages";
 
 export const metadata: Metadata = { title: "Activity" };
 
-type Tok = { token_year: number; token_no: number; customer: { name: string } | null } | null;
+type Tok = { token_year: number; token_no: number; customer: { name: string } | null; alteration_pieces?: { id: string; item_type: string }[] } | null;
 type Item = { at: string; who: string; text: string; tok: Tok; kind: "status" | "edit" | "whatsapp" | "new" };
 
 const LIMIT = 200;
@@ -26,8 +27,8 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const lo = `${from}T00:00:00+05:30`;
   const hi = `${to}T23:59:59.999+05:30`;
 
-  const tokSel = "alteration:alterations(token_year,token_no,customer:customers(name))";
-  let ev = supabase.from("alteration_events").select(`id,kind,from_status,to_status,note,created_at,actor_id,actor:profiles(name),${tokSel}`)
+  const tokSel = "alteration:alterations(token_year,token_no,customer:customers(name),alteration_pieces(id,item_type))";
+  let ev = supabase.from("alteration_events").select(`id,kind,from_status,to_status,note,piece_ids,created_at,actor_id,actor:profiles(name),${tokSel}`)
     .gte("created_at", lo).lte("created_at", hi).order("created_at", { ascending: false }).limit(LIMIT);
   let ml = supabase.from("message_log").select(`id,template_key,opened_at,opened_by,who:profiles(name),${tokSel}`)
     .gte("opened_at", lo).lte("opened_at", hi).order("opened_at", { ascending: false }).limit(LIMIT);
@@ -42,7 +43,9 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const items: Item[] = [
     ...(events ?? []).map((e: any): Item => ({
       at: e.created_at, who: e.actor?.name ?? "—", tok: e.alteration, kind: e.kind === "status" ? "status" : "edit",
-      text: e.kind === "status" ? `${e.from_status ? STATUS_LABEL[e.from_status] + " → " : ""}${STATUS_LABEL[e.to_status]}${e.note ? ` (${e.note})` : ""}` : e.note ?? "Edited",
+      text: e.kind === "status"
+        ? `${e.from_status ? STATUS_LABEL[e.from_status] + " → " : ""}${STATUS_LABEL[e.to_status]}${e.piece_ids?.length ? `: ${itemsText(e.piece_ids.map((id: string) => e.alteration?.alteration_pieces?.find((p: { id: string }) => p.id === id)?.item_type ?? "item"))}` : ""}${e.note ? ` (${e.note})` : ""}`
+        : e.note ?? "Edited",
     })),
     ...(msgs ?? []).map((m: any): Item => ({ at: m.opened_at, who: m.who?.name ?? "—", tok: m.alteration, kind: "whatsapp", text: `Opened WhatsApp: ${MSG_LABEL[m.template_key] ?? m.template_key}` })),
     ...(news ?? []).map((n: any): Item => ({

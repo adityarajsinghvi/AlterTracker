@@ -7,7 +7,8 @@ export type PublicToken = {
   shop_name: string; shop_phone: string; address: string | null; base_url: string;
   token_year: number; token_no: number; status: string; promised_date: string;
   delivered_at: string | null; collected_by: string | null; phone_last4: string;
-  pieces: { item_type: string; work_notes: string; photo_paths: string[] }[];
+  photos: string[];
+  pieces: { item_type: string; work_notes: string | null; status: string; delivered_at: string | null; collected_by: string | null; photo_paths: string[] }[];
 };
 
 // No session needed: the public_token() function returns only customer-safe fields.

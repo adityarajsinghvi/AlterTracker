@@ -6,7 +6,7 @@ import { useAction } from "@/lib/use-action";
 import { publicLink, type Shop } from "@/lib/messages";
 import { saveTemplate } from "../actions";
 
-const PLACEHOLDERS = ["customer_name", "token", "items", "promised_date", "link", "delivered_at", "collected_by", "shop_name", "shop_phone"];
+const PLACEHOLDERS = ["customer_name", "token", "items", "promised_date", "link", "delivered_at", "collected_by", "shop_name", "shop_phone", "more"];
 
 export function TemplateEditor({ t, shop }: { t: { key: string; label: string; body: string; active: boolean }; shop: Shop }) {
   const [body, setBody] = useState(t.body);
@@ -17,7 +17,7 @@ export function TemplateEditor({ t, shop }: { t: { key: string; label: string; b
   const sample = {
     customer_name: "Anita Sharma", token: "26-142", items: "Blazer + 2 Trouser", promised_date: "Fri, 20 Nov",
     link: publicLink(shop, "k3x9a7bq2m"), delivered_at: "18 Nov, 4:12 pm", collected_by: "Anita Sharma",
-    shop_name: shop.shop_name, shop_phone: shop.shop_phone,
+    shop_name: shop.shop_name, shop_phone: shop.shop_phone, more: " The rest will follow.",
   };
   const unknown = [...body.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => !PLACEHOLDERS.includes(k));
 

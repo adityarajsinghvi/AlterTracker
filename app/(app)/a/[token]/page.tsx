@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui";
 import { WaButton } from "@/components/wa-button";
 import { getMessageContext } from "@/lib/message-data";
 import { getItemSuggestions } from "@/lib/item-suggestions";
-import { itemsText, messageButtons } from "@/lib/messages";
+import { currentTap, itemsText, messageButtons } from "@/lib/messages";
 import { summarizeItems } from "@/lib/items";
 import { EditDetails } from "./edit-details";
 import { ItemsPanel, type ItemView } from "./items-panel";
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 type PieceRow = {
   id: string; item_type: string; work_notes: string | null; sort: number; status: Status; tailor_id: string | null;
-  tailor: { name: string } | null; status_at: string; delivered_at: string | null; collected_by_name: string | null;
+  tailor: { name: string } | null; status_at: string; ready_at: string | null; delivered_at: string | null; collected_by_name: string | null;
   redo_count: number; cancel_reason: string | null;
 };
 type EventRow = {
@@ -77,10 +77,9 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
 
   const msgs = [...(a.messages as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[])].sort((x, y) => y.id - x.id);
   const buttons = messageButtons({
-    token_year: a.token_year, token_no: a.token_no, status: a.status, public_slug: a.public_slug,
-    promised_date: a.promised_date, ready_at: a.ready_at, delivered_at: a.delivered_at,
-    collected_by_name: a.collected_by_name, customerName: a.customer.name, customerPhone: a.customer.phone,
-    itemTypes: pieces.filter((p) => p.status !== "cancelled").map((p) => p.item_type),
+    token_year: a.token_year, token_no: a.token_no, public_slug: a.public_slug, promised_date: a.promised_date,
+    customerName: a.customer.name, customerPhone: a.customer.phone,
+    items: pieces.map((p) => ({ name: p.item_type, status: p.status, ready_at: p.ready_at, delivered_at: p.delivered_at, collected_by: p.collected_by_name })),
   }, templates, shop);
   const timeline = [
     ...events.map((e) => ({ at: e.created_at, sort: e.id, kind: "event" as const, e })),
@@ -142,7 +141,7 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
         <section aria-label="WhatsApp" className="space-y-3">
           <h2 className="text-lg font-semibold">WhatsApp</h2>
           {buttons.map((b) => {
-            const last = msgs.find((m) => m.template_key === b.key);
+            const last = currentTap(msgs, b);
             return (
               <WaButton key={b.key} alterationId={a.id} templateKey={b.key} label={b.label} href={b.href}
                 disabledReason={b.disabledReason}

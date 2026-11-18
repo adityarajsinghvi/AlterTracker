@@ -14,6 +14,15 @@ const STEPS = [
   { key: "delivered", label: "Delivered" },
 ];
 
+// What the customer sees per item. Never the tailor's name.
+const ITEM_STATUS: Record<string, { label: string; cls: string }> = {
+  received: { label: "At the shop", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
+  with_tailor: { label: "Being altered", cls: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" },
+  ready: { label: "Ready for pickup", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100" },
+  delivered: { label: "Collected", cls: "bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-100" },
+  cancelled: { label: "Cancelled", cls: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" },
+};
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const t = await getPublicToken(slug);
@@ -35,10 +44,20 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
   const t = await getPublicToken(slug);
   if (!t) notFound();
 
-  const photos = await signPhotos(t.pieces.flatMap((p) => p.photo_paths));
+  const photos = await signPhotos([...(t.photos ?? []), ...t.pieces.flatMap((p) => p.photo_paths ?? [])]);
+  const visitPhotos = (t.photos ?? []).map((p) => photos.get(p)).filter((x): x is string => !!x);
   const step = STEPS.findIndex((s) => s.key === t.status);
   const cancelled = t.status === "cancelled";
   const callable = /^\d{10}$/.test(t.shop_phone) && t.shop_phone !== "0000000000";
+
+  const live = t.pieces.filter((p) => p.status !== "cancelled");
+  const n = (s: string) => live.filter((p) => p.status === s).length;
+  const pending = n("received") + n("with_tailor");
+  const summary = [
+    n("delivered") ? `${n("delivered")} collected` : "",
+    n("ready") ? `${n("ready")} ready for pickup` : "",
+    pending ? `${pending} still being worked on` : "",
+  ].filter(Boolean).join(" · ");
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md space-y-6 px-4 py-8">
@@ -77,34 +96,55 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
             })}
           </ol>
         )}
+        {!cancelled && summary && live.length > 1 && <p className="mt-4 text-sm font-medium">{summary}</p>}
 
-        <dl className="mt-6 space-y-1 text-sm">
-          {t.status !== "delivered" && !cancelled && (
+        <dl className="mt-5 space-y-1 text-sm">
+          {pending > 0 && !cancelled && (
             <div className="flex justify-between"><dt className="text-muted">Ready by</dt><dd className="font-semibold">{fmtDate(t.promised_date)}</dd></div>
           )}
           {t.status === "delivered" && t.delivered_at && (
             <>
-              <div className="flex justify-between"><dt className="text-muted">Collected on</dt><dd className="font-semibold">{fmtDateTime(t.delivered_at)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Last collected on</dt><dd className="font-semibold">{fmtDateTime(t.delivered_at)}</dd></div>
               <div className="flex justify-between"><dt className="text-muted">Collected by</dt><dd className="font-semibold">{t.collected_by}</dd></div>
             </>
           )}
         </dl>
       </section>
 
+      {visitPhotos.length > 0 && (
+        <section aria-label="Photos" className="flex flex-wrap justify-center gap-2">
+          {visitPhotos.map((u, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={u} src={u} alt={`Your items, photo ${i + 1}`} loading="lazy" className="max-h-64 w-full rounded-xl border border-border object-cover" />
+          ))}
+        </section>
+      )}
+
       <section aria-label="Items" className="space-y-3">
         <h2 className="text-lg font-semibold">Items</h2>
-        {t.pieces.map((p, i) => (
-          <div key={i} className="rounded-2xl border border-border bg-card p-3">
-            <p className="font-semibold">{p.item_type}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm">{p.work_notes}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {p.photo_paths.map((path) => photos.get(path) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={path} src={photos.get(path)} alt={`${p.item_type}`} loading="lazy" className="size-24 rounded-lg border border-border object-cover" />
-              ))}
+        {t.pieces.map((p, i) => {
+          const st = ITEM_STATUS[p.status] ?? ITEM_STATUS.received;
+          return (
+            <div key={i} className="rounded-2xl border border-border bg-card p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold">{p.item_type}</p>
+                <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", st.cls)}>{st.label}</span>
+              </div>
+              {p.work_notes && <p className="mt-1 whitespace-pre-wrap text-sm">{p.work_notes}</p>}
+              {p.status === "delivered" && p.delivered_at && (
+                <p className="mt-1 text-xs text-muted">Collected {fmtDateTime(p.delivered_at)}{p.collected_by ? ` by ${p.collected_by}` : ""}</p>
+              )}
+              {(p.photo_paths ?? []).some((x) => photos.get(x)) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {p.photo_paths.map((path) => photos.get(path) && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={path} src={photos.get(path)} alt={p.item_type} loading="lazy" className="size-24 rounded-lg border border-border object-cover" />
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
     </main>
   );

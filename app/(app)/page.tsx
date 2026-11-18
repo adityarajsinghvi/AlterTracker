@@ -37,15 +37,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   ]);
   const rows = ((data ?? []) as unknown as CardRow[]);
   const today = todayIST();
-  const inWork = (a: CardRow) => a.status === "received" || a.status === "with_tailor";
+  // A visit appears under every tab that has at least one of its items.
+  const has = (a: CardRow, ...st: string[]) => a.alteration_pieces.some((p) => st.includes(p.status));
+  const age = (a: CardRow, st: string, f: "status_at" | "ready_at" | "sent_to_tailor_at") =>
+    a.alteration_pieces.filter((p) => p.status === st).map((p) => p[f] ?? "").sort()[0] ?? "";
 
   const lists: Record<TabKey, CardRow[]> = {
-    today: rows.filter((a) => inWork(a) && a.promised_date === today).sort((x, y) => x.token_no - y.token_no),
-    overdue: rows.filter((a) => inWork(a) && a.promised_date < today).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
-    received: rows.filter((a) => a.status === "received").sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
-    tailor: rows.filter((a) => a.status === "with_tailor")
-      .sort((x, y) => (x.sent_to_tailor_at ?? "").localeCompare(y.sent_to_tailor_at ?? "")),
-    ready: rows.filter((a) => a.status === "ready").sort((x, y) => (x.ready_at ?? "").localeCompare(y.ready_at ?? "")),
+    today: rows.filter((a) => has(a, "received", "with_tailor") && a.promised_date === today).sort((x, y) => x.token_no - y.token_no),
+    overdue: rows.filter((a) => has(a, "received", "with_tailor") && a.promised_date < today).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
+    received: rows.filter((a) => has(a, "received")).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
+    tailor: rows.filter((a) => has(a, "with_tailor")).sort((x, y) => age(x, "with_tailor", "sent_to_tailor_at").localeCompare(age(y, "with_tailor", "sent_to_tailor_at"))),
+    ready: rows.filter((a) => has(a, "ready")).sort((x, y) => age(x, "ready", "ready_at").localeCompare(age(y, "ready", "ready_at"))),
   };
   const list = lists[tab];
 
@@ -73,7 +75,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">{EMPTY[tab]}</p>
       ) : (
         <ul className="space-y-2">
-          {list.map((a) => <TokenCard key={a.id} a={a} templates={templates} shop={shop} />)}
+          {list.map((a) => <TokenCard key={a.id} a={a} templates={templates} shop={shop} tab={tab} />)}
         </ul>
       )}
 

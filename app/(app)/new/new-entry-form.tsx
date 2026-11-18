@@ -127,9 +127,9 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
   if (done) {
     const { result, photoIssue, itemNames } = done;
     const receipt = receiptButton({
-      token_year: result.tokenYear, token_no: result.tokenNo, status: "received", public_slug: result.slug,
-      promised_date: promised, ready_at: null, delivered_at: null, collected_by_name: null,
-      customerName: result.customerName, customerPhone: phone10, itemTypes: itemNames,
+      token_year: result.tokenYear, token_no: result.tokenNo, public_slug: result.slug, promised_date: promised,
+      customerName: result.customerName, customerPhone: phone10,
+      items: itemNames.map((name) => ({ name, status: "received", ready_at: null, delivered_at: null, collected_by: null })),
     }, templates, shop);
     return (
       <section className="space-y-5 text-center" aria-live="polite">

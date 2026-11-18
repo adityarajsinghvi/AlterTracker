@@ -6,18 +6,33 @@ import { StatusBadge, inputCls } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, fmtDateTime, tokenLabel } from "@/lib/format";
 import { itemsText } from "@/lib/messages";
+import { summarizeItems } from "@/lib/items";
 
 export const metadata: Metadata = { title: "Search" };
 
+type Piece = {
+  item_type: string; status: string; delivered_at: string | null; collected_by_name: string | null; tailor: { name: string } | null;
+};
 type Tok = {
   id: string; token_year: number; token_no: number; status: string; promised_date: string; created_at: string;
   delivered_at: string | null; collected_by_name: string | null; cancel_reason: string | null;
-  alteration_pieces: { item_type: string }[];
+  alteration_pieces: Piece[];
 };
+
+/** "Shirt + Trouser collected by Papa on 18 Nov, 4:12 pm" — one line per handover. */
+function handovers(pieces: Piece[]): string[] {
+  const groups = new Map<string, Piece[]>();
+  pieces.filter((p) => p.status === "delivered" && p.delivered_at).forEach((p) => {
+    const k = `${p.delivered_at}|${p.collected_by_name}`;
+    groups.set(k, [...(groups.get(k) ?? []), p]);
+  });
+  return [...groups.values()].sort((x, y) => (x[0].delivered_at! < y[0].delivered_at! ? -1 : 1))
+    .map((g) => `${itemsText(g.map((p) => p.item_type))} collected by ${g[0].collected_by_name} on ${fmtDateTime(g[0].delivered_at!)}`);
+}
 type Cust = { id: string; name: string; phone: string; alterations: Tok[] };
 
 const TOKEN_FIELDS =
-  "id,token_year,token_no,status,promised_date,created_at,delivered_at,collected_by_name,cancel_reason,alteration_pieces(item_type)";
+  "id,token_year,token_no,status,promised_date,created_at,delivered_at,collected_by_name,cancel_reason,alteration_pieces(item_type,status,delivered_at,collected_by_name,tailor:tailors(name))";
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q: raw = "" } = await searchParams;
@@ -87,11 +102,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                       <span className="font-bold">#{tokenLabel(t.token_year, t.token_no)}</span>
                       <StatusBadge status={t.status} />
                     </div>
-                    <p className="text-sm">{itemsText(t.alteration_pieces.map((p) => p.item_type))}</p>
+                    <p className="text-sm">{itemsText(t.alteration_pieces.filter((p) => p.status !== "cancelled").map((p) => p.item_type))}</p>
+                    <p className="text-sm font-medium">{summarizeItems(t.alteration_pieces.map((p) => ({ status: p.status, tailor: p.tailor?.name ?? null })))}</p>
                     <p className="text-sm text-muted">Promised {fmtDate(t.promised_date)}</p>
-                    {t.status === "delivered" && t.delivered_at && (
-                      <p className="text-sm font-medium">Collected by {t.collected_by_name} on {fmtDateTime(t.delivered_at)}</p>
-                    )}
+                    {handovers(t.alteration_pieces).map((h) => <p key={h} className="text-sm font-medium">{h}</p>)}
                     {t.status === "cancelled" && <p className="text-sm text-muted">Cancelled: {t.cancel_reason}</p>}
                   </Link>
                 </li>
