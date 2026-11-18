@@ -10,13 +10,15 @@ const done = (): { ok: true } => { revalidatePath("/", "layout"); return { ok: t
 
 export async function addStaff(input: { name: string; phone: string; pin: string }): Promise<ActionResult> {
   await requireOwner();
-  const phone = normalizePhone(input.phone);
-  if (!input.name.trim()) return fail("Enter the staff member's name.");
-  if (!isValidPhone(phone)) return fail("Enter a valid 10-digit mobile number.");
+  const name = input.name.trim().replace(/\s+/g, " ");
+  const phone = input.phone.trim() ? normalizePhone(input.phone) : "";
+  if (!name) return fail("Enter the staff member's name.");
+  if (name.length > 40) return fail("The name is too long (40 letters at most).");
+  if (phone && !isValidPhone(phone)) return fail("Enter a valid 10-digit mobile number, or leave it empty.");
   if (!isValidPin(input.pin)) return fail("PIN must be exactly 4 digits.");
   const supabase = await createClient();
   const { error } = await supabase.rpc("owner_create_staff", {
-    p_name: input.name.trim(), p_phone: phone, p_password: pinToPassword(input.pin),
+    p_name: name, p_phone: phone || null, p_password: pinToPassword(input.pin),
   });
   return error ? fail(error.message) : done();
 }

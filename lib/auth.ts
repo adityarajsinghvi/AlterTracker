@@ -1,4 +1,4 @@
-// Phone + PIN <-> Supabase email + password mapping. Server-side only (uses the pepper).
+// Name + PIN -> Supabase password. Server-side only (uses the pepper).
 export function normalizePhone(input: string): string {
   return input.replace(/\D/g, "").slice(-10);
 }
@@ -9,10 +9,6 @@ export function isValidPhone(phone10: string): boolean {
 
 export function isValidPin(pin: string): boolean {
   return /^\d{4}$/.test(pin);
-}
-
-export function phoneToEmail(phone10: string): string {
-  return `${phone10}@staff.singhvi.local`;
 }
 
 export function pinToPassword(pin: string): string {

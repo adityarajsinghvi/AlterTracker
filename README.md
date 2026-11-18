@@ -4,12 +4,12 @@ Mobile-first PWA for Singhvi Readymades. See `SPEC.md` for the full spec.
 
 ## Setup
 1. `npm install`
-2. `cp .env.example .env.local` and fill in `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_PIN_PEPPER`, `OWNER_PHONE`, `OWNER_PIN`.
+2. `cp .env.example .env.local` and fill in `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_PIN_PEPPER`, `OWNER_NAME`, `OWNER_PIN`.
 3. Apply `supabase/migrations/*` (already applied to the `altertracker` Supabase project).
 4. `npm run seed:owner` creates the owner login.
 5. `npm run dev`
 
-Test staff login: `npx tsx scripts/create-staff.ts "Ramesh" 9829012345 4821`.
+Staff log in with their name and a 4-digit PIN. Add staff in More > Staff, or: `npx tsx scripts/create-staff.ts "Ramesh" 4821`.
 
 ## Notes
 - Tokens restart each year and display as `26-101`.

@@ -10,9 +10,9 @@ export function LoginForm() {
   return (
     <form action={action} className="mt-8 space-y-4">
       <div>
-        <label htmlFor="phone" className="mb-1 block text-sm font-medium">Mobile number</label>
-        <input id="phone" name="phone" type="tel" inputMode="numeric" autoComplete="username"
-          maxLength={14} defaultValue={state.phone} required className={field} placeholder="98290 12345" />
+        <label htmlFor="name" className="mb-1 block text-sm font-medium">Your name</label>
+        <input id="name" name="name" type="text" autoComplete="username" autoCapitalize="words" autoCorrect="off"
+          maxLength={60} defaultValue={state.name} required className={field} placeholder="e.g. Ramesh" />
       </div>
       <div>
         <label htmlFor="pin" className="mb-1 block text-sm font-medium">4-digit PIN</label>

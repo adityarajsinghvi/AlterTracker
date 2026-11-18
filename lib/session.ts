@@ -3,7 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export type Me = { id: string; name: string; phone: string; role: "owner" | "staff" };
+export type Me = { id: string; name: string; phone: string | null; role: "owner" | "staff" };
 
 // Reads the caller's profile. RLS hides it when the account is deactivated, which logs them out.
 export const getMe = cache(async (): Promise<Me> => {

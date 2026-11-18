@@ -1,18 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Check, Phone } from "lucide-react";
+import { Phone } from "lucide-react";
 import { getPublicToken, signPhotos } from "@/lib/public-token";
 import { fmtDate, fmtDateTime, tokenLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+// The journey of every item. The names are friendly and never reveal who does the work.
 const STEPS = [
-  { key: "received", label: "Received" },
-  { key: "with_tailor", label: "With tailor" },
+  { key: "received", label: "At shop" },
+  { key: "with_tailor", label: "Altering" },
   { key: "ready", label: "Ready" },
-  { key: "delivered", label: "Delivered" },
+  { key: "delivered", label: "Collected" },
 ];
+const BAR: Record<string, string> = {
+  received: "bg-amber-500", with_tailor: "bg-sky-500", ready: "bg-emerald-500", delivered: "bg-primary", cancelled: "bg-red-400",
+};
 
 // What the customer sees per item. Never the tailor's name.
 const ITEM_STATUS: Record<string, { label: string; cls: string }> = {
@@ -46,7 +50,6 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
 
   const photos = await signPhotos([...(t.photos ?? []), ...t.pieces.flatMap((p) => p.photo_paths ?? [])]);
   const visitPhotos = (t.photos ?? []).map((p) => photos.get(p)).filter((x): x is string => !!x);
-  const step = STEPS.findIndex((s) => s.key === t.status);
   const cancelled = t.status === "cancelled";
   const callable = /^\d{10}$/.test(t.shop_phone) && t.shop_phone !== "0000000000";
 
@@ -81,22 +84,11 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
             This token was cancelled. Please contact the shop.
           </p>
         ) : (
-          <ol className="mt-6 grid grid-cols-4 gap-1" aria-label="Progress">
-            {STEPS.map((s, i) => {
-              const done = i <= step;
-              return (
-                <li key={s.key} className="flex flex-col items-center gap-2 text-xs" aria-current={i === step ? "step" : undefined}>
-                  <span className={cn("flex size-8 items-center justify-center rounded-full border-2 text-sm font-bold",
-                    done ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted")}>
-                    {done ? <Check className="size-4" aria-hidden /> : i + 1}
-                  </span>
-                  <span className={cn("font-medium", i === step ? "text-foreground" : "text-muted")}>{s.label}</span>
-                </li>
-              );
-            })}
-          </ol>
+          <div className="mt-5 flex gap-1" role="img" aria-label={summary || "Progress"}>
+            {t.pieces.map((p, i) => <span key={i} className={cn("h-2.5 flex-1 rounded-full", BAR[p.status] ?? "bg-border")} />)}
+          </div>
         )}
-        {!cancelled && summary && live.length > 1 && <p className="mt-4 text-sm font-medium">{summary}</p>}
+        {!cancelled && summary && <p className="mt-3 text-sm font-medium">{summary}</p>}
 
         <dl className="mt-5 space-y-1 text-sm">
           {pending > 0 && !cancelled && (
@@ -131,6 +123,19 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ sl
                 <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", st.cls)}>{st.label}</span>
               </div>
               {p.work_notes && <p className="mt-1 whitespace-pre-wrap text-sm">{p.work_notes}</p>}
+              {p.status !== "cancelled" && (
+                <ol className="mt-3 grid grid-cols-4 gap-1" aria-label={`${p.item_type}: ${st.label}`}>
+                  {STEPS.map((s, k) => {
+                    const at = STEPS.findIndex((x) => x.key === p.status);
+                    return (
+                      <li key={s.key} aria-current={k === at ? "step" : undefined} className="space-y-1">
+                        <span className={cn("block h-1.5 rounded-full", k <= at ? BAR[p.status] : "bg-border")} />
+                        <span className={cn("block text-[11px] leading-tight", k === at ? "font-semibold text-foreground" : "text-muted")}>{s.label}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
               {p.status === "delivered" && p.delivered_at && (
                 <p className="mt-1 text-xs text-muted">Collected {fmtDateTime(p.delivered_at)}{p.collected_by ? ` by ${p.collected_by}` : ""}</p>
               )}

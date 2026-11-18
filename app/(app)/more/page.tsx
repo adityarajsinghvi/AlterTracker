@@ -18,7 +18,7 @@ export default async function MorePage() {
   const me = await getMe();
   return (
     <>
-      <PageTitle sub={`${me.name} · ${me.phone} · ${me.role}`}>More</PageTitle>
+      <PageTitle sub={`${me.name} · ${me.role}`}>More</PageTitle>
       {me.role === "owner" && (
         <ul className="mb-6 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {adminLinks.map((l) => (
