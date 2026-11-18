@@ -1,68 +1,84 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { PageTitle } from "@/components/page-title";
-import { StatusBadge } from "@/components/ui";
+import { CARD_SELECT, TokenCard, type CardRow } from "@/components/token-card";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
-import { fmtDate, fmtDateTime, isOverdue, tokenLabel } from "@/lib/format";
-import { WaButton } from "@/components/wa-button";
 import { getMessageContext } from "@/lib/message-data";
-import { itemsText, messageButtons } from "@/lib/messages";
+import { todayIST } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-export default async function HomePage() {
+const TABS = [
+  { key: "today", label: "Due today" },
+  { key: "overdue", label: "Overdue" },
+  { key: "tailor", label: "With tailor" },
+  { key: "ready", label: "Ready" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+const EMPTY: Record<TabKey, string> = {
+  today: "Nothing is due today.",
+  overdue: "Nothing is overdue. Well done!",
+  tailor: "Nothing is with a tailor right now.",
+  ready: "No ready items waiting for pickup.",
+};
+
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab: rawTab } = await searchParams;
+  const tab: TabKey = TABS.some((t) => t.key === rawTab) ? (rawTab as TabKey) : "today";
   const me = await getMe();
   const supabase = await createClient();
-  // Temporary list until the four Home tabs arrive in Phase 4.
-  const { data } = await supabase
-    .from("alterations")
-    .select("id,token_year,token_no,status,promised_date,public_slug,ready_at,customer:customers(name,phone),alteration_pieces(item_type),messages:message_log(id,template_key,opened_at,who:profiles(name))")
-    .in("status", ["received", "with_tailor", "ready"])
-    .order("promised_date").limit(50);
-
   const { templates, shop } = await getMessageContext();
+
+  const { data, error } = await supabase
+    .from("alterations").select(CARD_SELECT)
+    .in("status", ["received", "with_tailor", "ready"]).limit(500);
+  const rows = ((data ?? []) as unknown as CardRow[]);
+  const today = todayIST();
+  const inWork = (a: CardRow) => a.status === "received" || a.status === "with_tailor";
+
+  const lists: Record<TabKey, CardRow[]> = {
+    today: rows.filter((a) => inWork(a) && a.promised_date === today).sort((x, y) => x.token_no - y.token_no),
+    overdue: rows.filter((a) => inWork(a) && a.promised_date < today).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
+    tailor: rows.filter((a) => a.status === "with_tailor")
+      .sort((x, y) => (x.sent_to_tailor_at ?? "").localeCompare(y.sent_to_tailor_at ?? "")),
+    ready: rows.filter((a) => a.status === "ready").sort((x, y) => (x.ready_at ?? "").localeCompare(y.ready_at ?? "")),
+  };
+  const list = lists[tab];
+
   return (
     <>
       <PageTitle sub={me.role === "owner" ? "Owner" : "Staff"}>Namaste, {me.name}</PageTitle>
-      <h2 className="mb-2 text-lg font-semibold">Open tokens</h2>
-      {!data?.length ? (
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">Nothing in for alteration. Tap New to add an entry.</p>
+
+      <nav aria-label="Lists" className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-border/50 p-1">
+        {TABS.map((t) => {
+          const n = lists[t.key].length;
+          const active = t.key === tab;
+          return (
+            <Link key={t.key} href={t.key === "today" ? "/" : `/?tab=${t.key}`} aria-current={active ? "page" : undefined}
+              className={cn("flex min-h-14 flex-col items-center justify-center rounded-lg px-1 text-center text-xs font-medium leading-tight",
+                active ? "bg-card shadow-sm" : "text-muted")}>
+              <span className={cn("text-lg font-bold", t.key === "overdue" && n > 0 && "text-danger")}>{n}</span>
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {error && <p role="alert" className="mb-3 text-sm text-danger">Could not load the list. Pull down to retry.</p>}
+      {list.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">{EMPTY[tab]}</p>
       ) : (
         <ul className="space-y-2">
-          {data.map((a) => {
-            const label = tokenLabel(a.token_year, a.token_no);
-            const customer = a.customer as unknown as { name: string; phone: string };
-            const types = (a.alteration_pieces as { item_type: string }[]).map((p) => p.item_type);
-            const msgs = (a.messages as unknown as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[]).sort((x, y) => y.id - x.id);
-            const reminder = messageButtons({
-              token_year: a.token_year, token_no: a.token_no, status: a.status, public_slug: a.public_slug,
-              promised_date: a.promised_date, ready_at: a.ready_at, delivered_at: null, collected_by_name: null,
-              customerName: customer.name, customerPhone: customer.phone, itemTypes: types,
-            }, templates, shop).find((b) => b.key === "reminder" || (b.key === "delay"));
-            const items = itemsText((a.alteration_pieces as { item_type: string }[]).map((p) => p.item_type));
-            const over = isOverdue(a.promised_date, a.status);
-            return (
-              <li key={a.id} className="rounded-xl border border-border bg-card">
-                <Link href={`/a/${label}`} className="block p-3 active:opacity-80">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">#{label}</span><StatusBadge status={a.status} />
-                  </div>
-                  <p className="mt-1 font-medium">{customer.name}</p>
-                  <p className="text-sm text-muted">{items}</p>
-                  <p className={over ? "text-sm font-semibold text-danger" : "text-sm text-muted"}>Due {fmtDate(a.promised_date)}{over && " · overdue"}</p>
-                </Link>
-                {reminder && (
-                  <div className="px-3 pb-3">
-                    {(() => { const last = msgs.find((m) => m.template_key === reminder.key); return (
-                      <WaButton compact alterationId={a.id} templateKey={reminder.key} label={reminder.label} href={reminder.href}
-                        disabledReason={reminder.disabledReason}
-                        lastSent={last ? { by: last.who?.name ?? "—", at: fmtDateTime(last.opened_at) } : null} />
-                    ); })()}
-                  </div>
-                )}
-              </li>
-            );
-          })}
+          {list.map((a) => <TokenCard key={a.id} a={a} templates={templates} shop={shop} />)}
         </ul>
       )}
+
+      <div className="h-16" aria-hidden />
+      <Link href="/new" aria-label="New alteration"
+        className="fixed bottom-24 right-4 z-30 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-semibold text-primary-foreground shadow-lg active:opacity-80">
+        <Plus className="size-5" aria-hidden /> New
+      </Link>
     </>
   );
 }

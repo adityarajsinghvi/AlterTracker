@@ -28,6 +28,11 @@ export default async function MorePage() {
           ))}
         </ul>
       )}
+      {me.role === "staff" && (
+        <ul className="mb-6 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          <li><Link href="/more/activity" className="flex h-14 items-center px-4 font-medium">My activity</Link></li>
+        </ul>
+      )}
       <form action={logout}>
         <button type="submit" className="h-12 w-full rounded-xl border border-border bg-card font-medium text-danger active:opacity-80">
           Log out
