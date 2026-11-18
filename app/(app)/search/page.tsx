@@ -49,7 +49,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       cq = cq.ilike("phone", `%${digits}%`);
     } else {
       mode = "name";
-      cq = cq.ilike("name", `%${q.replace(/[%_,()\\]/g, " ").trim()}%`);
+      // Every word must appear in the name, in any order ("rajesh jain" finds "Rajesh kumar Jain").
+      // Honorifics such as "ji" are ignored so "Rajesh ji Jain" still finds the customer.
+      const words = q.replace(/[%_,()\\]/g, " ").split(/\s+/).filter((w) => w && !/^(ji|sir|bhai|shri|mr|mrs)$/i.test(w));
+      for (const w of words.length ? words : [q]) cq = cq.ilike("name", `%${w}%`);
     }
     const { data } = await cq;
     customers = (data ?? []) as unknown as Cust[];

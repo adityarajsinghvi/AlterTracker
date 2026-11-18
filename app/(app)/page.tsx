@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { key: "today", label: "Due today" },
   { key: "overdue", label: "Overdue" },
+  { key: "received", label: "Received" },
   { key: "tailor", label: "With tailor" },
   { key: "ready", label: "Ready" },
 ] as const;
@@ -19,6 +20,7 @@ type TabKey = (typeof TABS)[number]["key"];
 const EMPTY: Record<TabKey, string> = {
   today: "Nothing is due today.",
   overdue: "Nothing is overdue. Well done!",
+  received: "Nothing is waiting at the shop to be sent out.",
   tailor: "Nothing is with a tailor right now.",
   ready: "No ready items waiting for pickup.",
 };
@@ -40,6 +42,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const lists: Record<TabKey, CardRow[]> = {
     today: rows.filter((a) => inWork(a) && a.promised_date === today).sort((x, y) => x.token_no - y.token_no),
     overdue: rows.filter((a) => inWork(a) && a.promised_date < today).sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
+    received: rows.filter((a) => a.status === "received").sort((x, y) => x.promised_date.localeCompare(y.promised_date)),
     tailor: rows.filter((a) => a.status === "with_tailor")
       .sort((x, y) => (x.sent_to_tailor_at ?? "").localeCompare(y.sent_to_tailor_at ?? "")),
     ready: rows.filter((a) => a.status === "ready").sort((x, y) => (x.ready_at ?? "").localeCompare(y.ready_at ?? "")),
@@ -50,13 +53,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     <>
       <PageTitle sub={me.role === "owner" ? "Owner" : "Staff"}>Namaste, {me.name}</PageTitle>
 
-      <nav aria-label="Lists" className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-border/50 p-1">
+      <nav aria-label="Lists" className="mb-4 grid grid-cols-5 gap-0.5 rounded-xl bg-border/50 p-1">
         {TABS.map((t) => {
           const n = lists[t.key].length;
           const active = t.key === tab;
           return (
             <Link key={t.key} href={t.key === "today" ? "/" : `/?tab=${t.key}`} aria-current={active ? "page" : undefined}
-              className={cn("flex min-h-14 flex-col items-center justify-center rounded-lg px-1 text-center text-xs font-medium leading-tight",
+              className={cn("flex min-h-14 flex-col items-center justify-center rounded-lg px-0.5 text-center text-[11px] font-medium leading-tight",
                 active ? "bg-card shadow-sm" : "text-muted")}>
               <span className={cn("text-lg font-bold", t.key === "overdue" && n > 0 && "text-danger")}>{n}</span>
               {t.label}
