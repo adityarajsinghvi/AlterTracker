@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { daysSince, fmtDate, todayIST, tokenLabel } from "@/lib/format";
 import { itemsText } from "@/lib/messages";
 import { cn } from "@/lib/utils";
+import { LinkPending } from "@/components/link-pending";
 
 export const metadata: Metadata = { title: "Tailors" };
 
@@ -56,7 +57,8 @@ export default async function TailorsPage() {
                     const label = tokenLabel(g.alt.token_year, g.alt.token_no);
                     return (
                       <li key={g.alt.id}>
-                        <Link href={`/a/${label}`} prefetch={false} className="flex items-center justify-between gap-3 py-2.5 active:opacity-80">
+                        <Link href={`/a/${label}`} className="relative flex items-center justify-between gap-3 py-2.5 active:opacity-80">
+                          <LinkPending />
                           <span className="min-w-0">
                             <span className="font-bold">#{label}</span> <span className="font-medium">{g.alt.customer.name}</span>
                             <span className="block truncate text-sm text-muted">{itemsText(g.items)}</span>

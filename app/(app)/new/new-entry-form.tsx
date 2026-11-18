@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, Check, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { SaveContact } from "@/components/save-contact";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPhoto } from "@/lib/upload";
 import { compressImage } from "@/lib/image";
 import { STATUS_LABEL, addDaysISO, fmtDate, normalizeItem } from "@/lib/format";
 import { normalizePhone, isValidPhone } from "@/lib/auth";
@@ -103,13 +103,11 @@ export function NewEntryForm({ tailors, today, templates, shop, itemSuggestions 
       let photoIssue = false;
       if (photos.length) {
         setBusy("Uploading photos…");
-        const supabase = createClient();
         const results = await Promise.all(photos.map(async (ph, n) => {
           try {
             const blob = await compressImage(ph.file);
             const path = `${res.id}/visit-${Date.now()}-${n}.jpg`;
-            const { error: upErr } = await supabase.storage.from("item-photos").upload(path, blob, { contentType: "image/jpeg" });
-            return upErr ? null : path;
+            return (await uploadPhoto(path, blob)) ? path : null;
           } catch { return null; }
         }));
         const paths = results.filter((x): x is string => !!x);

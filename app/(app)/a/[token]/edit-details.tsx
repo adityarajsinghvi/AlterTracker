@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { todayIST } from "@/lib/format";
 import { Sheet } from "@/components/sheet";
@@ -24,13 +24,16 @@ function EditInner({ a, role }: { a: Alt; role: "owner" | "staff" }) {
   const [cPhone, setCPhone] = useState(a.customerPhone);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { if (saved && !refreshing) { setOpen(false); setSaved(false); } }, [saved, refreshing]);
 
   async function go(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setBusy(true); setErr(null);
     try {
       const r = await fn();
       if (!r.ok) { setErr(r.error); return; }
-      setOpen(false); router.refresh();
+      setSaved(true); startRefresh(() => router.refresh());
     } catch { setErr("No internet connection. Please try again."); } finally { setBusy(false); }
   }
 
@@ -44,7 +47,7 @@ function EditInner({ a, role }: { a: Alt; role: "owner" | "staff" }) {
           <label className="flex h-11 items-center gap-3 font-medium"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="size-6 accent-[var(--primary)]" /> Paid</label>
           <Field label="Rack / shelf label" htmlFor="e-rack"><input id="e-rack" value={rack} onChange={(e) => setRack(e.target.value)} className={inputCls} /></Field>
           {err && <p role="alert" className="text-sm text-danger">{err}</p>}
-          <Btn disabled={busy} onClick={() => go(() => saveAlteration({ id: a.id, promised, charge: charge.trim() === "" ? null : Number(charge), paid, rack }))}>{busy ? "Saving…" : "Save"}</Btn>
+          <Btn disabled={busy} onClick={() => go(() => saveAlteration({ id: a.id, promised, charge: charge.trim() === "" ? null : Number(charge), paid, rack }))}>{busy || refreshing ? "Saving…" : "Save"}</Btn>
 
           {role === "owner" && (
             <div className="space-y-3 border-t border-border pt-4">

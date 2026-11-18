@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Plus, Search, Scissors, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LinkPending } from "@/components/link-pending";
 
 const items = [
   { href: "/", label: "Home", Icon: Home },
@@ -22,10 +23,11 @@ export function BottomNav() {
           return (
             <li key={href} className="flex-1">
               <Link href={href} aria-current={active ? "page" : undefined}
-                className={cn("flex h-16 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
+                className={cn("relative flex h-16 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors active:opacity-70",
                   active ? "text-primary" : "text-muted")}>
                 <Icon className="size-6" strokeWidth={active ? 2.5 : 2} aria-hidden />
                 {label}
+                <LinkPending />
               </Link>
             </li>
           );

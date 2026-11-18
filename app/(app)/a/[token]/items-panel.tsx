@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Pencil, Plus } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPhoto } from "@/lib/upload";
 import { compressImage } from "@/lib/image";
 import { STATUS_LABEL, rupees } from "@/lib/format";
 import type { Status, Tailor } from "@/lib/types";
@@ -31,11 +31,16 @@ function detail(i: ItemView): string {
   }
 }
 
-export function ItemsPanel({ alterationId, label, customerName, items, tailors, role, charge, paid, suggestions, tokenClosed }: {
+export function ItemsPanel({ alterationId, label, customerName, items: serverItems, tailors, role, charge, paid, suggestions, tokenClosed }: {
   alterationId: string; label: string; customerName: string; items: ItemView[]; tailors: Tailor[];
   role: "owner" | "staff"; charge: number | null; paid: boolean; suggestions: string[]; tokenClosed: boolean;
 }) {
   const router = useRouter();
+  // The list on screen changes the moment an action succeeds; the fresh copy from the server replaces it a moment later.
+  const [items, setItems] = useState(serverItems);
+  useEffect(() => setItems(serverItems), [serverItems]);
+  const [refreshing, startRefresh] = useTransition();
+  const [note, setNote] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sheet, setSheet] = useState<SheetName>(null);
   const [busy, setBusy] = useState(false);
@@ -71,13 +76,15 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
   const toggle = (id: string) => setSelected((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const pick = (f: (i: ItemView) => boolean) => setSelected(new Set(items.filter((i) => selectable(i) && f(i)).map((i) => i.id)));
 
-  async function run(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+  async function run(fn: () => Promise<{ ok: true } | { ok: false; error: string }>, patch?: (list: ItemView[]) => ItemView[], doneNote = "Saved ✓") {
     setBusy(true); setErr(null);
     try {
       const r = await fn();
-      if (!r.ok) { setErr(r.error); router.refresh(); return false; }
+      if (!r.ok) { setErr(r.error); startRefresh(() => router.refresh()); return false; }
       close(); setSelected(new Set()); setReason(""); setPhoto(null); setNewName(""); setNewNote("");
-      router.refresh();
+      if (patch) setItems(patch);
+      setNote(doneNote); setTimeout(() => setNote(null), 2500);
+      startRefresh(() => router.refresh());
       return true;
     } catch {
       setErr("No internet connection. Nothing was changed. Please try again.");
@@ -85,8 +92,21 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
     } finally { setBusy(false); }
   }
 
+  /** What the list should look like once these items have moved (shown immediately, confirmed by the server a moment later). */
+  const moved = (to: Status, idList: string[], extra: { tailorId?: string | null; collectedBy?: string | null } = {}) => (list: ItemView[]): ItemView[] =>
+    list.map((i) => {
+      if (!idList.includes(i.id)) return i;
+      const tailorId = to === "with_tailor" ? extra.tailorId || i.tailorId : i.tailorId;
+      return {
+        ...i, status: to, days: 0, tailorId, tailorName: tailors.find((t) => t.id === tailorId)?.name ?? i.tailorName,
+        redo: i.status === "ready" && to === "with_tailor" ? i.redo + 1 : i.redo,
+        collectedBy: to === "delivered" ? extra.collectedBy ?? i.collectedBy : i.collectedBy,
+        deliveredAt: to === "delivered" ? "just now" : i.deliveredAt,
+      };
+    });
+
   const move = (to: Status, idList: string[], extra: Partial<Parameters<typeof moveItems>[0]> = {}) =>
-    run(() => moveItems({ alterationId, pieceIds: idList, to, seen, ...extra }));
+    run(() => moveItems({ alterationId, pieceIds: idList, to, seen, ...extra }), moved(to, idList, extra));
 
   async function handOver() {
     if (who === "other" && !otherName.trim()) { setErr("Enter the name of the person collecting."); return; }
@@ -96,15 +116,14 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
         try {
           const blob = await compressImage(photo);
           const path = `${alterationId}/handover-${Date.now()}.jpg`;
-          const { error } = await createClient().storage.from("item-photos").upload(path, blob, { contentType: "image/jpeg" });
-          if (!error) photoPath = path;
+          if (await uploadPhoto(path, blob)) photoPath = path;
         } catch { /* the photo is optional */ }
       }
       return moveItems({
         alterationId, pieceIds: handIds, to: "delivered", seen, photoPath,
         collectedBy: who === "other" ? otherName.trim() : customerName, markPaid: unpaid && receivedNow,
       });
-    });
+    }, moved("delivered", handIds, { collectedBy: who === "other" ? otherName.trim() : customerName }));
   }
 
   const tailorSelect = (opts: { sameOption?: boolean } = {}) => (
@@ -128,6 +147,11 @@ export function ItemsPanel({ alterationId, label, customerName, items, tailors, 
             <Plus className="size-4" aria-hidden /> Add item
           </button>
         )}
+      </div>
+
+      <div aria-live="polite" className="min-h-6 text-sm font-medium">
+        {note && <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100">{note}</span>}
+        {!note && refreshing && <span className="text-muted">Updating…</span>}
       </div>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Quick select">

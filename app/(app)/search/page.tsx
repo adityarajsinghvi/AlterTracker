@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fmtDate, fmtDateTime, tokenLabel } from "@/lib/format";
 import { itemsText } from "@/lib/messages";
 import { summarizeItems } from "@/lib/items";
+import { LinkPending } from "@/components/link-pending";
 
 export const metadata: Metadata = { title: "Search" };
 
@@ -97,7 +98,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             <ul className="mt-2 space-y-2">
               {c.alterations.map((t) => (
                 <li key={t.id}>
-                  <Link href={`/a/${tokenLabel(t.token_year, t.token_no)}`} className="block rounded-xl border border-border bg-card p-3 active:opacity-80">
+                  <Link href={`/a/${tokenLabel(t.token_year, t.token_no)}`} className="relative block rounded-xl border border-border bg-card p-3 active:opacity-80">
+                    <LinkPending />
                     <div className="flex items-center justify-between">
                       <span className="font-bold">#{tokenLabel(t.token_year, t.token_no)}</span>
                       <StatusBadge status={t.status} />

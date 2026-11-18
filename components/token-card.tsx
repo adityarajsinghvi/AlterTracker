@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { WaButton } from "@/components/wa-button";
+import { LinkPending } from "@/components/link-pending";
 import { daysSince, fmtDate, fmtDateTime, todayIST, tokenLabel } from "@/lib/format";
 import { summarizeItems } from "@/lib/items";
 import { currentTap, itemsText, messageButtons, type Shop, type Template } from "@/lib/messages";
@@ -58,7 +59,8 @@ export function TokenCard({ a, templates, shop, tab }: { a: CardRow; templates: 
 
   return (
     <li className={cn("rounded-xl border bg-card", stale ? "border-amber-500 ring-1 ring-amber-500" : overdue ? "border-danger/50" : "border-border")}>
-      <Link href={`/a/${label}`} prefetch={false} className="block p-3 active:opacity-80">
+      <Link href={`/a/${label}`} className="relative block p-3 active:opacity-80">
+        <LinkPending />
         <div className="flex items-center justify-between gap-2">
           <span className="font-bold">#{label}</span>
           {when && <span className="text-sm text-muted">{when}</span>}

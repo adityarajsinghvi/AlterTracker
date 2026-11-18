@@ -7,6 +7,7 @@ import { getMe } from "@/lib/session";
 import { getMessageContext } from "@/lib/message-data";
 import { todayIST } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { LinkPending } from "@/components/link-pending";
 
 const TABS = [
   { key: "today", label: "Due today" },
@@ -61,8 +62,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           const active = t.key === tab;
           return (
             <Link key={t.key} href={t.key === "today" ? "/" : `/?tab=${t.key}`} aria-current={active ? "page" : undefined}
-              className={cn("flex min-h-14 flex-col items-center justify-center rounded-lg px-0.5 text-center text-[11px] font-medium leading-tight",
+              className={cn("relative flex min-h-14 flex-col items-center justify-center rounded-lg px-0.5 text-center text-[11px] font-medium leading-tight",
                 active ? "bg-card shadow-sm" : "text-muted")}>
+              <LinkPending />
               <span className={cn("text-lg font-bold", t.key === "overdue" && n > 0 && "text-danger")}>{n}</span>
               {t.label}
             </Link>
@@ -83,6 +85,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <Link href="/new" aria-label="New alteration"
         className="fixed bottom-24 right-4 z-30 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-semibold text-primary-foreground shadow-lg active:opacity-80">
         <Plus className="size-5" aria-hidden /> New
+        <LinkPending />
       </Link>
     </>
   );

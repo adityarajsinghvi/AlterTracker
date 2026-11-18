@@ -1,8 +1,8 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPhoto } from "@/lib/upload";
 import { compressImage } from "@/lib/image";
 import { Sheet } from "@/components/sheet";
 import { attachVisitPhotos } from "./actions";
@@ -13,24 +13,23 @@ export function VisitPhotos({ alterationId, urls, pending, closed }: { alteratio
   const [zoom, setZoom] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [refreshing, startRefresh] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function add(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true); setMsg(null);
     try {
-      const supabase = createClient();
       const paths: string[] = [];
       for (const [n, f] of Array.from(files).entries()) {
         const blob = await compressImage(f);
         const path = `${alterationId}/visit-${Date.now()}-${n}.jpg`;
-        const { error } = await supabase.storage.from("item-photos").upload(path, blob, { contentType: "image/jpeg" });
-        if (error) throw error;
+        if (!(await uploadPhoto(path, blob))) throw new Error("upload failed");
         paths.push(path);
       }
       const r = await attachVisitPhotos(alterationId, paths, false);
       if (!r.ok) throw new Error(r.error);
-      router.refresh();
+      startRefresh(() => router.refresh());
     } catch {
       setMsg("Photo did not upload. Check your internet and try again.");
     } finally {
@@ -53,7 +52,7 @@ export function VisitPhotos({ alterationId, urls, pending, closed }: { alteratio
         {!closed && (
           <label className="flex h-24 min-w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border px-3 text-xs font-medium text-primary">
             <Camera className="size-5" aria-hidden />
-            {uploading ? "Uploading…" : urls.length ? "Add photo" : pending ? "Add photo (pending)" : "Add photo"}
+            {uploading ? "Uploading…" : refreshing ? "Updating…" : urls.length ? "Add photo" : pending ? "Add photo (pending)" : "Add photo"}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="sr-only" disabled={uploading} onChange={(e) => add(e.target.files)} />
           </label>
         )}
