@@ -4,10 +4,15 @@ import files from "../.open-next/embedded-assets.js";
 
 export { DOQueueHandler, DOShardedTagCache, BucketCachePurge } from "../.open-next/worker.js";
 
+const decoded = new Map(); // decode each file once per worker instance, not on every request
+
 function decode(b64) {
+  const hit = decoded.get(b64);
+  if (hit) return hit;
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  decoded.set(b64, out);
   return out;
 }
 

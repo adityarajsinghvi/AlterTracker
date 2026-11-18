@@ -28,20 +28,22 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
   const { token } = await params;
   const parsed = parseToken(token);
   if (!parsed) notFound();
-  const me = await getMe();
   const supabase = await createClient();
-
-  const { data: a } = await supabase
+  // Ask for everything at once (one round trip deep), then sign photo links.
+  const [me, { data: a }, { data: tailors }, { templates, shop }] = await Promise.all([
+    getMe(),
+    supabase
     .from("alterations")
     .select(`*, customer:customers(id,name,phone), tailor:tailors(name),
       creator:profiles!alterations_created_by_fkey(name), deliverer:profiles!alterations_delivered_by_fkey(name),
       pieces:alteration_pieces(*), events:alteration_events(*, actor:profiles(name)),
       messages:message_log(id, template_key, opened_at, who:profiles(name))`)
-    .eq("token_year", parsed.year).eq("token_no", parsed.no).maybeSingle();
+    .eq("token_year", parsed.year).eq("token_no", parsed.no).maybeSingle(),
+    supabase.from("tailors").select("id,name,is_in_house").eq("active", true)
+      .order("is_in_house", { ascending: false }).order("name"),
+    getMessageContext(),
+  ]);
   if (!a) notFound();
-
-  const { data: tailors } = await supabase.from("tailors").select("id,name,is_in_house").eq("active", true)
-    .order("is_in_house", { ascending: false }).order("name");
 
   const pieces = [...(a.pieces as (PieceView & { sort: number; photo_paths: string[] })[])].sort((x, y) => x.sort - y.sort);
   const events = [...(a.events as EventRow[])].sort((x, y) => y.id - x.id);
@@ -53,7 +55,6 @@ export default async function TokenPage({ params }: { params: Promise<Params> })
     data?.forEach((s) => { if (s.path && s.signedUrl) signed.set(s.path, s.signedUrl); });
   }
 
-  const { templates, shop } = await getMessageContext();
   const msgs = [...(a.messages as { id: number; template_key: string; opened_at: string; who: { name: string } | null }[])]
     .sort((x, y) => y.id - x.id);
   const buttons = messageButtons({

@@ -39,7 +39,7 @@ export function TokenCard({ a, templates, shop }: { a: CardRow; templates: Templ
 
   return (
     <li className={cn("rounded-xl border bg-card", stale ? "border-amber-500 ring-1 ring-amber-500" : overdue ? "border-danger/50" : "border-border")}>
-      <Link href={`/a/${label}`} className="block p-3 active:opacity-80">
+      <Link href={`/a/${label}`} prefetch={false} className="block p-3 active:opacity-80">
         <div className="flex items-center justify-between">
           <span className="font-bold">#{label}</span>
           <StatusBadge status={a.status} />

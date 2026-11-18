@@ -9,9 +9,10 @@ export const metadata: Metadata = { title: "New alteration" };
 
 export default async function NewPage() {
   const supabase = await createClient();
-  const { data: tailors } = await supabase
-    .from("tailors").select("id,name,is_in_house").eq("active", true).order("is_in_house", { ascending: false }).order("name");
-  const { templates, shop } = await getMessageContext();
+  const [{ data: tailors }, { templates, shop }] = await Promise.all([
+    supabase.from("tailors").select("id,name,is_in_house").eq("active", true).order("is_in_house", { ascending: false }).order("name"),
+    getMessageContext(),
+  ]);
   return (
     <>
       <PageTitle>New alteration</PageTitle>

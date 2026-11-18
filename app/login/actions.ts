@@ -19,12 +19,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   });
   if (error || !data.user) return { error: "Wrong phone number or PIN.", phone };
 
-  // Deactivated users cannot read their profile (RLS), so they are turned away here.
-  const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user.id).maybeSingle();
-  if (!profile) {
-    await supabase.auth.signOut();
-    return { error: "This account is switched off. Please ask the owner.", phone };
-  }
+  // Deactivated accounts are turned away by the app layout (it signs them out and explains why).
   redirect("/");
 }
 

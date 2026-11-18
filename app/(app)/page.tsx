@@ -26,13 +26,13 @@ const EMPTY: Record<TabKey, string> = {
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: rawTab } = await searchParams;
   const tab: TabKey = TABS.some((t) => t.key === rawTab) ? (rawTab as TabKey) : "today";
-  const me = await getMe();
   const supabase = await createClient();
-  const { templates, shop } = await getMessageContext();
-
-  const { data, error } = await supabase
-    .from("alterations").select(CARD_SELECT)
-    .in("status", ["received", "with_tailor", "ready"]).limit(500);
+  // One round trip deep: everything the page needs is asked for at the same time.
+  const [me, { templates, shop }, { data, error }] = await Promise.all([
+    getMe(),
+    getMessageContext(),
+    supabase.from("alterations").select(CARD_SELECT).in("status", ["received", "with_tailor", "ready"]).limit(500),
+  ]);
   const rows = ((data ?? []) as unknown as CardRow[]);
   const today = todayIST();
   const inWork = (a: CardRow) => a.status === "received" || a.status === "with_tailor";
